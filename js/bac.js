@@ -1,0 +1,169 @@
+// Pegel – Blutalkohol-Modell (reine Rechenlogik, ohne DOM)
+//
+// Verteilung:   Watson-Formel für das Gesamtkörperwasser (TBW),
+//               BAK [‰] = 0,8 · A / (1,055 · TBW)   (A = resorbierter Alkohol in g)
+// Resorption:   exponentiell (Halbwertszeit abhängig vom Mageninhalt),
+//               abzüglich Resorptionsdefizit (Alkohol, der nie im Blut ankommt)
+// Abbau:        linear nach Widmark (Standard 0,15 ‰ pro Stunde)
+//
+// Alle Werte sind Schätzungen. Echte Werte schwanken individuell stark.
+
+export const ETHANOL_DENSITY = 0.789; // g/ml
+const BLOOD_WATER_FRACTION = 0.8;
+const BLOOD_DENSITY = 1.055; // g/ml
+const HOUR = 3600_000;
+const MINUTE = 60_000;
+
+/** Abbaurate in ‰ pro Stunde */
+export const ELIMINATION = { fast: 0.2, typical: 0.15, slow: 0.1 };
+
+export const STOMACH = {
+  empty: { absorptionHalfLifeMin: 8, resorptionDeficit: 0.1 },
+  full: { absorptionHalfLifeMin: 20, resorptionDeficit: 0.2 },
+};
+
+/** Gramm reiner Alkohol in einem Getränk */
+export function alcoholGrams(volumeMl, abvPercent) {
+  return volumeMl * (abvPercent / 100) * ETHANOL_DENSITY;
+}
+
+/** Gesamtkörperwasser in Litern nach Watson et al. (1980) */
+export function totalBodyWater({ sex, age, heightCm, weightKg }) {
+  if (sex === 'female') {
+    return -2.097 + 0.1069 * heightCm + 0.2466 * weightKg;
+  }
+  return 2.447 - 0.09516 * age + 0.1074 * heightCm + 0.3362 * weightKg;
+}
+
+/** Wie viel ‰ ein Gramm vollständig resorbierter Alkohol ergibt */
+export function permillePerGram(profile) {
+  const tbw = totalBodyWater(profile);
+  if (!(tbw > 5)) throw new Error('Ungültiges Profil');
+  return BLOOD_WATER_FRACTION / (BLOOD_DENSITY * tbw);
+}
+
+export function isValidProfile(p) {
+  return (
+    !!p &&
+    (p.sex === 'male' || p.sex === 'female') &&
+    p.age >= 16 && p.age <= 110 &&
+    p.heightCm >= 120 && p.heightCm <= 230 &&
+    p.weightKg >= 35 && p.weightKg <= 250
+  );
+}
+
+function stomachOf(drink) {
+  return drink.fullStomach ? STOMACH.full : STOMACH.empty;
+}
+
+/** Anteil des Getränks, der bis Zeitpunkt t ins Blut übergegangen ist (0…1) */
+function absorbedFraction(drink, t) {
+  if (t <= drink.time) return 0;
+  const { absorptionHalfLifeMin } = stomachOf(drink);
+  const minutes = (t - drink.time) / MINUTE;
+  return 1 - Math.pow(0.5, minutes / absorptionHalfLifeMin);
+}
+
+function effectiveGrams(drink) {
+  return alcoholGrams(drink.volumeMl, drink.abv) * (1 - stomachOf(drink).resorptionDeficit);
+}
+
+/**
+ * Simuliert den BAK-Verlauf in Minutenschritten ab dem ersten Getränk,
+ * bis aller Alkohol aufgenommen und wieder abgebaut ist (mind. bis `until`).
+ * @returns {{t:number, bac:number}[]}
+ */
+export function simulate(drinks, profile, { elimination = ELIMINATION.typical, stepMin = 1, until = 0 } = {}) {
+  if (!drinks.length) return [];
+  const sorted = [...drinks].sort((a, b) => a.time - b.time);
+  const k = permillePerGram(profile);
+  const stepMs = stepMin * MINUTE;
+  const elimPerStep = (elimination * stepMin) / 60;
+  const start = sorted[0].time;
+  const lastDrink = sorted[sorted.length - 1].time;
+  const hardEnd = Math.max(lastDrink, until) + 72 * HOUR;
+
+  const points = [{ t: start, bac: 0 }];
+  let bac = 0;
+  for (let t = start + stepMs; t <= hardEnd; t += stepMs) {
+    let gramsIn = 0;
+    let pending = false;
+    for (const d of sorted) {
+      if (d.time >= t) { pending = true; break; }
+      const f0 = absorbedFraction(d, t - stepMs);
+      const f1 = absorbedFraction(d, t);
+      gramsIn += effectiveGrams(d) * (f1 - f0);
+      if (f1 < 0.999) pending = true;
+    }
+    bac = Math.max(0, bac + gramsIn * k - elimPerStep);
+    points.push({ t, bac });
+    if (!pending && bac === 0 && t >= until) break;
+  }
+  return points;
+}
+
+/** BAK zum Zeitpunkt t (lineare Interpolation) */
+export function bacAt(points, t) {
+  if (!points.length || t <= points[0].t) return 0;
+  const last = points[points.length - 1];
+  if (t >= last.t) return last.bac;
+  const step = points[1].t - points[0].t;
+  const i = Math.floor((t - points[0].t) / step);
+  const a = points[i];
+  const b = points[i + 1];
+  return a.bac + ((b.bac - a.bac) * (t - a.t)) / (b.t - a.t);
+}
+
+/**
+ * Zeitpunkt, ab dem der BAK dauerhaft unter `threshold` liegt.
+ * null, wenn das (ab `now`) bereits der Fall ist.
+ */
+export function timeBelow(points, threshold, now) {
+  for (let i = points.length - 1; i >= 0; i--) {
+    if (points[i].bac >= threshold) {
+      const t = i + 1 < points.length ? points[i + 1].t : points[i].t;
+      return t > now ? t : null;
+    }
+  }
+  return null;
+}
+
+/** Alles, was die Oberfläche braucht, in einem Aufruf */
+export function summarize(drinks, profile, now) {
+  const points = simulate(drinks, profile, { until: now });
+  const empty = {
+    points, current: 0, peak: null, below05: null, below03: null,
+    soberAt: null, soberEarliest: null, soberLatest: null, totalGrams: 0,
+  };
+  if (!points.length) return empty;
+
+  let peak = points[0];
+  for (const p of points) if (p.bac > peak.bac) peak = p;
+
+  const EPS = 0.005;
+  const fast = simulate(drinks, profile, { elimination: ELIMINATION.fast, until: now });
+  const slow = simulate(drinks, profile, { elimination: ELIMINATION.slow, until: now });
+
+  return {
+    points,
+    current: bacAt(points, now),
+    peak: peak.bac > 0 ? peak : null,
+    below05: timeBelow(points, 0.5, now),
+    below03: timeBelow(points, 0.3, now),
+    soberAt: timeBelow(points, EPS, now),
+    soberEarliest: timeBelow(fast, EPS, now),
+    soberLatest: timeBelow(slow, EPS, now),
+    totalGrams: drinks.reduce((s, d) => s + alcoholGrams(d.volumeMl, d.abv), 0),
+  };
+}
+
+/** Einordnung eines Promillewerts (Rechtslage Deutschland, Stand 2026) */
+export function classify(bac) {
+  if (bac < 0.01) return { level: 0, label: 'Rechnerisch nüchtern', note: 'Restalkohol ist trotzdem möglich.' };
+  if (bac < 0.3) return { level: 1, label: 'Leicht erhöht', note: 'Für Fahranfänger und unter 21 gilt 0,0 ‰.' };
+  if (bac < 0.5) return { level: 2, label: 'Achtung', note: 'Ab 0,3 ‰ mit Ausfallerscheinungen ist Fahren strafbar.' };
+  if (bac < 1.1) return { level: 3, label: 'Über 0,5 ‰', note: 'Fahren ist eine Ordnungswidrigkeit (Bußgeld, Fahrverbot).' };
+  if (bac < 1.6) return { level: 4, label: 'Absolut fahruntüchtig', note: 'Ab 1,1 ‰ ist Fahren eine Straftat.' };
+  if (bac < 2.5) return { level: 5, label: 'Sehr hoch', note: 'Trink Wasser, mach eine Pause und lass dich begleiten.' };
+  return { level: 6, label: 'Gefährlich hoch', note: 'Alkoholvergiftung möglich. Nicht allein bleiben, im Notfall 112 rufen.' };
+}

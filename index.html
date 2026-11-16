@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Pegel</title>
+  <meta name="description" content="Promille-Tracker: Getränke eintragen und den geschätzten Blutalkohol verfolgen.">
+  <meta name="theme-color" content="#14161c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Pegel">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Pegel</h1>
+    <button id="btn-profile" class="icon-btn" aria-label="Profil bearbeiten">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+  </header>
+
+  <main>
+    <section class="card hero" id="hero" data-level="0">
+      <div class="bac"><span id="bac-value">0,00</span><span class="unit">‰</span></div>
+      <div class="status" id="status-label">Rechnerisch nüchtern</div>
+      <p class="status-note" id="status-note"></p>
+      <dl class="facts" id="facts">
+        <div><dt>Unter 0,5 ‰</dt><dd id="fact-05">–</dd></div>
+        <div><dt>Nüchtern</dt><dd id="fact-sober">–</dd></div>
+        <div><dt>Höchstwert</dt><dd id="fact-peak">–</dd></div>
+        <div><dt>Alkohol gesamt</dt><dd id="fact-grams">0 g</dd></div>
+      </dl>
+    </section>
+
+    <section class="card chart-card" id="chart-card" hidden>
+      <svg id="chart" viewBox="0 0 340 170" preserveAspectRatio="none" role="img" aria-label="Promilleverlauf"></svg>
+    </section>
+
+    <section class="card">
+      <div class="row-between">
+        <h2>Getränk hinzufügen</h2>
+        <div class="segmented" role="radiogroup" aria-label="Mageninhalt">
+          <button role="radio" data-stomach="empty" aria-checked="true">Magen leer</button>
+          <button role="radio" data-stomach="full" aria-checked="false">gegessen</button>
+        </div>
+      </div>
+      <div class="presets" id="presets"></div>
+    </section>
+
+    <section class="card">
+      <div class="row-between">
+        <h2>Getrunken</h2>
+        <button id="btn-clear" class="text-btn" hidden>Alle löschen</button>
+      </div>
+      <ul class="drinks" id="drink-list"></ul>
+      <p class="empty" id="drink-empty">Noch nichts eingetragen.</p>
+    </section>
+
+    <p class="disclaimer">
+      Pegel <strong>schätzt</strong> den Blutalkohol mit der Watson-Widmark-Formel. Der echte Wert kann deutlich abweichen.
+      Nutze die App <strong>nie</strong>, um zu entscheiden, ob du fahren kannst. Wer trinkt, fährt nicht.
+    </p>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden>
+    <span id="toast-text"></span>
+    <button id="toast-undo" class="text-btn">Rückgängig</button>
+  </div>
+
+  <!-- Profil -->
+  <dialog id="dlg-profile">
+    <form method="dialog" id="form-profile">
+      <h2>Dein Profil</h2>
+      <p class="hint">Wird für die Berechnung gebraucht und bleibt nur auf diesem Gerät.</p>
+      <fieldset class="segmented wide">
+        <legend>Formel für</legend>
+        <label><input type="radio" name="sex" value="male" required> Mann</label>
+        <label><input type="radio" name="sex" value="female"> Frau</label>
+      </fieldset>
+      <div class="grid3">
+        <label>Alter<input name="age" type="number" inputmode="numeric" min="16" max="110" required><span>Jahre</span></label>
+        <label>Größe<input name="heightCm" type="number" inputmode="numeric" min="120" max="230" required><span>cm</span></label>
+        <label>Gewicht<input name="weightKg" type="number" inputmode="decimal" min="35" max="250" step="0.5" required><span>kg</span></label>
+      </div>
+      <div class="actions">
+        <button type="button" class="text-btn" id="profile-cancel">Abbrechen</button>
+        <button type="submit" class="primary">Speichern</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Getränk -->
+  <dialog id="dlg-drink">
+    <form method="dialog" id="form-drink">
+      <h2 id="drink-title">Eigenes Getränk</h2>
+      <label class="full">Name<input name="name" type="text" maxlength="30" placeholder="z. B. Gin Tonic" required></label>
+      <div class="grid3 time-row">
+        <label>Menge<input name="volumeMl" type="number" inputmode="numeric" min="10" max="3000" required><span>ml</span></label>
+        <label>Alkohol<input name="abv" type="number" inputmode="decimal" min="0.5" max="80" step="0.1" required><span>%</span></label>
+        <label>Uhrzeit<input name="time" type="time" required></label>
+      </div>
+      <label class="check"><input type="checkbox" name="fullStomach"> mit vollem Magen getrunken</label>
+      <div class="actions">
+        <button type="button" class="text-btn danger" id="drink-delete" hidden>Löschen</button>
+        <span class="spacer"></span>
+        <button type="button" class="text-btn" id="drink-cancel">Abbrechen</button>
+        <button type="submit" class="primary">Speichern</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

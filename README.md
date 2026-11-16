@@ -1,1 +1,68 @@
-# diesunddas
+# Pegel – Promille-Tracker
+
+Eine kleine Handy-App (Progressive Web App), die deinen **geschätzten Blutalkohol** verfolgt.
+Du trägst ein, was du trinkst, und Pegel zeigt dir:
+
+- den aktuellen Promillewert (aktualisiert sich alle 30 Sekunden)
+- wann du voraussichtlich unter 0,5 ‰ bist und wann du rechnerisch nüchtern bist (mit Spanne)
+- den Höchstwert und den Verlauf als Kurve inklusive Prognose
+- die Einordnung nach deutscher Rechtslage (0,3 / 0,5 / 1,1 / 1,6 ‰)
+
+Alle Daten bleiben **nur auf deinem Handy** (localStorage), es gibt keinen Server und kein Konto.
+
+> ⚠️ Pegel liefert nur eine Schätzung. Der echte Wert kann deutlich abweichen.
+> Nutze die App nie, um zu entscheiden, ob du Auto fahren kannst.
+
+## Auf dem Handy installieren
+
+Die App muss über **HTTPS** erreichbar sein, z. B. über GitHub Pages:
+
+1. Im Repo auf GitHub: *Settings → Pages → Branch* wählen → *Save*.
+2. Die angezeigte Adresse auf dem Handy öffnen.
+3. **iPhone (Safari):** Teilen-Symbol → *Zum Home-Bildschirm*.
+   **Android (Chrome):** Menü ⋮ → *App installieren*.
+
+Danach startet Pegel wie eine normale App im Vollbild und funktioniert auch offline.
+
+## Lokal entwickeln
+
+Kein Build-Schritt nötig, es ist reines HTML/CSS/JavaScript.
+
+```bash
+python3 -m http.server 8080   # oder: npm start
+# → http://localhost:8080
+npm test                      # Tests für das Rechenmodell
+```
+
+Wenn du Dateien änderst, erhöhe `VERSION` in `sw.js`, damit installierte Apps das Update laden.
+
+## So wird gerechnet
+
+| Schritt | Modell |
+|---|---|
+| Alkoholmenge | Volumen × Vol.-% × 0,789 g/ml |
+| Verteilung | Watson-Formel (Gesamtkörperwasser aus Geschlecht, Alter, Größe, Gewicht): BAK = 0,8 · A / (1,055 · TBW) |
+| Aufnahme | exponentiell; leerer Magen: Halbwertszeit 8 min, 10 % Resorptionsdefizit; voller Magen: 20 min, 20 % |
+| Abbau | linear nach Widmark, 0,15 ‰/h (Spanne für „nüchtern“: 0,1 bis 0,2 ‰/h) |
+
+Die Rechenlogik steckt komplett in `js/bac.js`, die Oberfläche in `js/app.js`.
+
+## Projektstruktur
+
+```
+index.html            Oberfläche
+css/style.css         Design (hell/dunkel automatisch)
+js/bac.js             Rechenmodell (ohne DOM, testbar)
+js/app.js             UI, Speicherung, Diagramm
+sw.js                 Service Worker (Offline)
+manifest.webmanifest  App-Manifest (Name, Icons)
+icons/                App-Icons
+test/bac.test.js      Tests (node --test)
+```
+
+## Ideen für später
+
+- Verlauf vergangener Abende / Statistik
+- Erinnerung „Wasser trinken“ oder Push, wenn 0,0 ‰ erreicht
+- Eigene Getränke als Favoriten speichern
+- Native App (z. B. mit Capacitor) für App Store / Play Store
