@@ -1,6 +1,6 @@
 // Service Worker: hält die App offline verfügbar.
 // Bei Änderungen an den Dateien VERSION erhöhen, damit Handys die neue Version laden.
-const VERSION = 'pegel-v1';
+const VERSION = 'pegel-v2';
 const ASSETS = [
   './', 'index.html', 'css/style.css', 'js/app.js', 'js/bac.js', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',

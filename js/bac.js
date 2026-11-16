@@ -56,12 +56,24 @@ function stomachOf(drink) {
   return drink.fullStomach ? STOMACH.full : STOMACH.empty;
 }
 
-/** Anteil des Getränks, der bis Zeitpunkt t ins Blut übergegangen ist (0…1) */
-function absorbedFraction(drink, t) {
-  if (t <= drink.time) return 0;
-  const { absorptionHalfLifeMin } = stomachOf(drink);
-  const minutes = (t - drink.time) / MINUTE;
-  return 1 - Math.pow(0.5, minutes / absorptionHalfLifeMin);
+/** Trinkdauer in ms (0 = auf einmal getrunken) */
+export function drinkDurationMs(drink) {
+  return Math.max(0, (drink.durationMin ?? 0) * MINUTE);
+}
+
+/**
+ * Anteil des Getränks, der bis Zeitpunkt t ins Blut übergegangen ist (0…1).
+ * Das Getränk wird gleichmäßig über die Trinkdauer D getrunken; jeder Schluck
+ * wird exponentiell resorbiert (Faltung → geschlossene Formel).
+ */
+export function absorbedFraction(drink, t) {
+  const dt = t - drink.time;
+  if (dt <= 0) return 0;
+  const k = Math.LN2 / (stomachOf(drink).absorptionHalfLifeMin * MINUTE); // pro ms
+  const D = drinkDurationMs(drink);
+  if (D === 0) return 1 - Math.exp(-k * dt);
+  if (dt <= D) return (dt - (1 - Math.exp(-k * dt)) / k) / D;
+  return (D - (Math.exp(-k * (dt - D)) - Math.exp(-k * dt)) / k) / D;
 }
 
 function effectiveGrams(drink) {
@@ -80,7 +92,7 @@ export function simulate(drinks, profile, { elimination = ELIMINATION.typical, s
   const stepMs = stepMin * MINUTE;
   const elimPerStep = (elimination * stepMin) / 60;
   const start = sorted[0].time;
-  const lastDrink = sorted[sorted.length - 1].time;
+  const lastDrink = Math.max(...sorted.map((d) => d.time + drinkDurationMs(d)));
   const hardEnd = Math.max(lastDrink, until) + 72 * HOUR;
 
   const points = [{ t: start, bac: 0 }];

@@ -98,11 +98,15 @@
     <form method="dialog" id="form-drink">
       <h2 id="drink-title">Eigenes Getränk</h2>
       <label class="full">Name<input name="name" type="text" maxlength="30" placeholder="z. B. Gin Tonic" required></label>
-      <div class="grid3 time-row">
+      <div class="grid2">
         <label>Menge<input name="volumeMl" type="number" inputmode="numeric" min="10" max="3000" required><span>ml</span></label>
         <label>Alkohol<input name="abv" type="number" inputmode="decimal" min="0.5" max="80" step="0.1" required><span>%</span></label>
-        <label>Uhrzeit<input name="time" type="time" required></label>
       </div>
+      <div class="grid2">
+        <label>Getrunken von<input name="start" type="time" required></label>
+        <label>bis<input name="end" type="time" required></label>
+      </div>
+      <p class="hint" id="drink-duration"></p>
       <label class="check"><input type="checkbox" name="fullStomach"> mit vollem Magen getrunken</label>
       <div class="actions">
         <button type="button" class="text-btn danger" id="drink-delete" hidden>Löschen</button>

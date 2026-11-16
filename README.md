@@ -42,6 +42,7 @@ Wenn du Dateien änderst, erhöhe `VERSION` in `sw.js`, damit installierte Apps 
 |---|---|
 | Alkoholmenge | Volumen × Vol.-% × 0,789 g/ml |
 | Verteilung | Watson-Formel (Gesamtkörperwasser aus Geschlecht, Alter, Größe, Gewicht): BAK = 0,8 · A / (1,055 · TBW) |
+| Trinkdauer | jedes Getränk hat „von–bis“; der Alkohol kommt gleichmäßig über diese Zeit in den Magen |
 | Aufnahme | exponentiell; leerer Magen: Halbwertszeit 8 min, 10 % Resorptionsdefizit; voller Magen: 20 min, 20 % |
 | Abbau | linear nach Widmark, 0,15 ‰/h (Spanne für „nüchtern“: 0,1 bis 0,2 ‰/h) |
 

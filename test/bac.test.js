@@ -93,3 +93,36 @@ test('Profilprüfung', () => {
   assert.ok(!isValidProfile({ ...male, weightKg: 10 }));
   assert.ok(!isValidProfile(null));
 });
+
+test('Trinkdauer: Resorption endet vollständig, Anteil steigt monoton', async () => {
+  const { absorbedFraction } = await import('../js/bac.js');
+  const t0 = Date.UTC(2026, 0, 1, 20);
+  const d = beer(t0, { durationMin: 60 });
+  let prev = 0;
+  for (let m = 0; m <= 300; m += 5) {
+    const f = absorbedFraction(d, t0 + m * 60_000);
+    assert.ok(f >= prev - 1e-12 && f <= 1, `m=${m} f=${f}`);
+    prev = f;
+  }
+  assert.ok(prev > 0.999);
+  // Stetig am Ende der Trinkdauer
+  const a = absorbedFraction(d, t0 + H - 1);
+  const b = absorbedFraction(d, t0 + H + 1);
+  assert.ok(Math.abs(a - b) < 1e-6);
+});
+
+test('Langsam getrunken ergibt niedrigeren Spitzenwert als auf ex', () => {
+  const t0 = Date.UTC(2026, 0, 1, 20);
+  const peakOf = (pts) => Math.max(...pts.map((p) => p.bac));
+  const fast = peakOf(simulate([beer(t0), beer(t0)], male));
+  const slow = peakOf(simulate([beer(t0, { durationMin: 90 }), beer(t0, { durationMin: 90 })], male));
+  assert.ok(slow < fast, `${slow} < ${fast}`);
+});
+
+test('Getränk, das noch getrunken wird, zählt erst anteilig', () => {
+  const t0 = Date.UTC(2026, 0, 1, 20);
+  const s = summarize([beer(t0, { durationMin: 60 })], male, t0 + 10 * 60_000);
+  const sAll = summarize([beer(t0)], male, t0 + 10 * 60_000);
+  assert.ok(s.current < sAll.current);
+  assert.ok(s.peak.t > t0 + 30 * 60_000);
+});

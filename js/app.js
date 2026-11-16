@@ -4,16 +4,17 @@ const MIN = 60_000;
 const HOUR = 60 * MIN;
 const KEEP_DRINKS_MS = 36 * HOUR;
 
+// durationMin: typische Trinkdauer; beim Antippen gilt „ab jetzt“
 const PRESETS = [
-  { emoji: '🍺', name: 'Bier', volumeMl: 500, abv: 5 },
-  { emoji: '🍺', name: 'Pils', volumeMl: 330, abv: 4.9 },
-  { emoji: '🍻', name: 'Weizen', volumeMl: 500, abv: 5.4 },
-  { emoji: '🍋', name: 'Radler', volumeMl: 500, abv: 2.5 },
-  { emoji: '🍷', name: 'Wein', volumeMl: 200, abv: 12 },
-  { emoji: '🥂', name: 'Sekt', volumeMl: 100, abv: 11 },
-  { emoji: '🍹', name: 'Spritz', volumeMl: 200, abv: 8 },
-  { emoji: '🍸', name: 'Longdrink', volumeMl: 40, abv: 40 },
-  { emoji: '🥃', name: 'Shot', volumeMl: 20, abv: 40 },
+  { emoji: '🍺', name: 'Bier', volumeMl: 500, abv: 5, durationMin: 30 },
+  { emoji: '🍺', name: 'Pils', volumeMl: 330, abv: 4.9, durationMin: 20 },
+  { emoji: '🍻', name: 'Weizen', volumeMl: 500, abv: 5.4, durationMin: 30 },
+  { emoji: '🍋', name: 'Radler', volumeMl: 500, abv: 2.5, durationMin: 30 },
+  { emoji: '🍷', name: 'Wein', volumeMl: 200, abv: 12, durationMin: 30 },
+  { emoji: '🥂', name: 'Sekt', volumeMl: 100, abv: 11, durationMin: 15 },
+  { emoji: '🍹', name: 'Spritz', volumeMl: 200, abv: 8, durationMin: 30 },
+  { emoji: '🍸', name: 'Longdrink', volumeMl: 40, abv: 40, durationMin: 30 },
+  { emoji: '🥃', name: 'Shot', volumeMl: 20, abv: 40, durationMin: 0 },
 ];
 
 // ---------- Speicher (nur lokal auf dem Gerät) ----------
@@ -59,6 +60,14 @@ function fmtDayPrefix(t, now) {
   const tm = new Date(now + 24 * HOUR);
   if (d.toDateString() === tm.toDateString()) return 'morgen ';
   return d.toLocaleDateString('de-DE', { weekday: 'short' }) + ' ';
+}
+
+const endOf = (d) => d.time + (d.durationMin ?? 0) * MIN;
+const fmtSpan = (d) => (d.durationMin ? `${fmtTime(d.time)}–${fmtTime(endOf(d))}` : fmtTime(d.time));
+function fmtDuration(min) {
+  if (min <= 0) return 'auf einmal';
+  const h = Math.floor(min / 60), m = Math.round(min % 60);
+  return h ? `${h} h${m ? ` ${m} min` : ''}` : `${m} min`;
 }
 
 const $ = (id) => document.getElementById(id);
@@ -110,7 +119,7 @@ function renderDrinks(now) {
     btn.querySelector('.time').textContent = fmtTime(d.time);
     btn.querySelector('.n').textContent = `${d.emoji ?? '🥤'} ${d.name}`;
     btn.querySelector('.meta').textContent =
-      `${fmtDayPrefix(d.time, now)}${fmtVolume(d.volumeMl)} · ${fmtNum(d.abv)} %${d.fullStomach ? ' · gegessen' : ''}`;
+      `${fmtDayPrefix(d.time, now)}${d.durationMin ? `bis ${fmtTime(endOf(d))} · ` : ''}${fmtVolume(d.volumeMl)} · ${fmtNum(d.abv)} %${d.fullStomach ? ' · gegessen' : ''}`;
     btn.querySelector('.grams').textContent = `${fmtNum(alcoholGrams(d.volumeMl, d.abv), 0)} g`;
     btn.addEventListener('click', () => openDrinkDialog(d));
     li.append(btn);
@@ -136,7 +145,7 @@ function renderChart(s, now) {
 
   const W = 340, H = 170, L = 26, R = 8, T = 10, B = 20;
   const t0 = s.points[0].t - 10 * MIN;
-  const t1 = Math.max(s.points[s.points.length - 1].t, now) + 10 * MIN;
+  const t1 = Math.max(s.points[s.points.length - 1].t, now, ...state.drinks.map(endOf)) + 10 * MIN;
   const yMax = Math.max(0.7, s.peak.bac * 1.2);
   const x = (t) => L + ((t - t0) / (t1 - t0)) * (W - L - R);
   const y = (v) => T + (1 - v / yMax) * (H - T - B);
@@ -175,7 +184,10 @@ function renderChart(s, now) {
   if (future.length > 1) nodes.push(el('path', { class: 'line-future', d: path(future) }));
 
   // Getränke als kleine Markierungen
-  for (const d of state.drinks) nodes.push(el('circle', { class: 'drink-tick', cx: x(d.time), cy: y(0), r: 2.5 }));
+  for (const d of state.drinks) {
+    if (d.durationMin) nodes.push(el('line', { class: 'drink-span', x1: x(d.time), x2: x(endOf(d)), y1: y(0), y2: y(0) }));
+    else nodes.push(el('circle', { class: 'drink-tick', cx: x(d.time), cy: y(0), r: 2.5 }));
+  }
 
   // Jetzt-Linie
   if (now >= t0 && now <= t1) {
@@ -191,7 +203,7 @@ function addDrink(drink) {
   state.drinks.push(d);
   saveDrinks();
   render();
-  showToast(`${d.name} eingetragen`, () => {
+  showToast(`${d.name} · ${fmtSpan(d)}`, () => {
     state.drinks = state.drinks.filter((x) => x.id !== d.id);
     saveDrinks();
     render();
@@ -287,6 +299,30 @@ function fromTimeInput(value, now = Date.now()) {
   return d.getTime();
 }
 
+/** Von/Bis aus dem Dialog → { time, durationMin }; „bis“ vor „von“ heißt: über Mitternacht */
+function readSpan() {
+  const f = $('form-drink');
+  const time = fromTimeInput(f.elements.start.value);
+  const [h, m] = f.elements.end.value.split(':').map(Number);
+  const end = new Date(time);
+  end.setHours(h, m, 0, 0);
+  if (end.getTime() < time) end.setDate(end.getDate() + 1);
+  return { time, durationMin: Math.round((end.getTime() - time) / MIN) };
+}
+
+function updateDurationHint() {
+  const f = $('form-drink');
+  if (!f.elements.start.value || !f.elements.end.value) { $('drink-duration').textContent = ''; return; }
+  const { durationMin } = readSpan();
+  const tooLong = durationMin > 6 * 60;
+  f.elements.end.setCustomValidity(tooLong ? 'Höchstens 6 Stunden pro Getränk' : '');
+  $('drink-duration').textContent = tooLong
+    ? 'Höchstens 6 Stunden pro Getränk. Trag lieber mehrere Getränke ein.'
+    : `Trinkdauer: ${fmtDuration(durationMin)}`;
+}
+$('form-drink').elements.start.addEventListener('input', updateDurationHint);
+$('form-drink').elements.end.addEventListener('input', updateDurationHint);
+
 function openDrinkDialog(drink) {
   state.editingId = drink?.id ?? null;
   const f = $('form-drink');
@@ -294,7 +330,10 @@ function openDrinkDialog(drink) {
   f.elements.name.value = drink?.name ?? '';
   f.elements.volumeMl.value = drink?.volumeMl ?? '';
   f.elements.abv.value = drink?.abv ?? '';
-  f.elements.time.value = toTimeInput(drink?.time ?? Date.now());
+  const start = drink?.time ?? Date.now() - 30 * MIN;
+  f.elements.start.value = toTimeInput(start);
+  f.elements.end.value = toTimeInput(drink ? endOf(drink) : Date.now());
+  updateDurationHint();
   f.elements.fullStomach.checked = drink?.fullStomach ?? state.fullStomach;
   $('drink-delete').hidden = !drink;
   $('dlg-drink').showModal();
@@ -306,7 +345,7 @@ $('form-drink').addEventListener('submit', () => {
     name: f.elements.name.value.trim() || 'Getränk',
     volumeMl: Number(f.elements.volumeMl.value),
     abv: Number(f.elements.abv.value),
-    time: fromTimeInput(f.elements.time.value),
+    ...readSpan(),
     fullStomach: f.elements.fullStomach.checked,
   };
   if (state.editingId) {
