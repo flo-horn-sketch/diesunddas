@@ -8,15 +8,15 @@
 // Cocktails:  Menge und Prozent beziehen sich auf das ganze Glas.
 
 export const CATEGORIES = {
-  bier: { label: 'Bier', emoji: '🍺', ml: 500, sizes: [200, 330, 500, 1000], estMin: 30 },
-  wein: { label: 'Wein', emoji: '🍷', ml: 200, sizes: [100, 200, 250, 500], estMin: 30 },
-  sekt: { label: 'Sekt & Spritz', emoji: '🥂', ml: 100, sizes: [100, 200, 750], estMin: 20 },
-  cocktail: { label: 'Cocktails', emoji: '🍹', ml: 250, sizes: [], estMin: 30 },
-  longdrink: { label: 'Longdrinks', emoji: '🍸', ml: 40, sizes: [20, 40, 60, 80], estMin: 30,
+  bier: { label: 'Bier', icon: 'bier', ml: 500, sizes: [200, 330, 500, 1000], estMin: 30 },
+  wein: { label: 'Wein', icon: 'wein', ml: 200, sizes: [100, 200, 250, 500], estMin: 30 },
+  sekt: { label: 'Sekt und Spritz', icon: 'sekt', ml: 100, sizes: [100, 200, 750], estMin: 20 },
+  cocktail: { label: 'Cocktails', icon: 'cocktail', ml: 250, sizes: [], estMin: 30 },
+  longdrink: { label: 'Longdrinks', icon: 'longdrink', ml: 40, sizes: [20, 40, 60, 80], estMin: 30,
     note: 'Menge = nur der Alkohol-Anteil (z. B. 4 cl Gin), Prozent = der Spirituose.' },
-  schnaps: { label: 'Schnaps & Spirituosen', emoji: '🥃', ml: 20, sizes: [20, 40], estMin: 0 },
-  likoer: { label: 'Likör & Bitter', emoji: '🥃', ml: 20, sizes: [20, 40], estMin: 0 },
-  cider: { label: 'Cider & Mixgetränke', emoji: '🍏', ml: 330, sizes: [250, 300, 330, 500], estMin: 30 },
+  schnaps: { label: 'Schnaps', icon: 'shot', ml: 20, sizes: [20, 40], estMin: 0 },
+  likoer: { label: 'Likör', icon: 'shot', ml: 20, sizes: [20, 40], estMin: 0 },
+  cider: { label: 'Cider und Mix', icon: 'pils', ml: 330, sizes: [250, 300, 330, 500], estMin: 30 },
 };
 
 const RAW = {
@@ -178,5 +178,5 @@ export function sizesFor(drink) {
   return [...set].filter(Boolean).sort((a, b) => a - b);
 }
 
-export const emojiFor = (cat) => CATEGORIES[cat]?.emoji ?? '🥤';
+export const iconFor = (cat) => CATEGORIES[cat]?.icon ?? 'glas';
 export const estMinFor = (cat) => CATEGORIES[cat]?.estMin ?? 20;

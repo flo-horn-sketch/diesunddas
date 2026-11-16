@@ -4,8 +4,9 @@ Eine kleine Handy-App (Progressive Web App), die deinen **geschätzten Blutalkoh
 Du trägst ein, was du trinkst, und Pegel zeigt dir:
 
 - eine Getränke-Datenbank mit über 200 Einträgen (Biere, Weine, Cocktails, Longdrinks, Schnäpse, Liköre, Cider) zum Durchsuchen
-- eine Stoppuhr: Getränk starten, „Fertig“ tippen, die Trinkdauer wird automatisch erfasst
-- nachträgliches Eintragen und Ändern (von–bis, Menge, Prozent)
+- eine Stoppuhr: Getränk antippen startet sie sofort, „Stopp“ beendet sie; ein neues Getränk stoppt das laufende automatisch (Shots werden direkt eingetragen)
+- Menge des laufenden Getränks direkt in der Stoppuhr-Karte ändern
+- nachträgliches Eintragen („Nachtragen“) und Ändern (von–bis, Menge, Prozent)
 - den aktuellen Promillewert (aktualisiert sich alle 30 Sekunden)
 - wann du voraussichtlich unter 0,5 ‰ bist und wann du rechnerisch nüchtern bist (mit Spanne)
 - den Höchstwert und den Verlauf als Kurve inklusive Prognose
@@ -55,9 +56,11 @@ Die Rechenlogik steckt komplett in `js/bac.js`, die Oberfläche in `js/app.js`.
 
 ```
 index.html            Oberfläche
-css/style.css         Design (hell/dunkel automatisch)
+css/style.css         Design (dunkel, Bernstein-Akzent)
 js/bac.js             Rechenmodell (ohne DOM, testbar)
 js/drinks.js          Getränke-Datenbank und Suche
+js/icons.js           Strich-Icons
+fonts/                Inter und Space Grotesk (SIL Open Font License)
 js/app.js             UI, Speicherung, Diagramm
 sw.js                 Service Worker (Offline)
 manifest.webmanifest  App-Manifest (Name, Icons)

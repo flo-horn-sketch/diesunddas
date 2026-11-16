@@ -1,7 +1,8 @@
 import { summarize, classify, alcoholGrams, isValidProfile } from './bac.js';
-import { CATEGORIES, searchDrinks, sizesFor, emojiFor, estMinFor } from './drinks.js';
+import { CATEGORIES, searchDrinks, sizesFor, iconFor, estMinFor } from './drinks.js';
+import { icon } from './icons.js';
 
-export const APP_VERSION = 5;
+export const APP_VERSION = 6;
 
 const SEC = 1000;
 const MIN = 60 * SEC;
@@ -9,28 +10,26 @@ const HOUR = 60 * MIN;
 const KEEP_DRINKS_MS = 36 * HOUR;
 const MAX_DURATION_MIN = 6 * 60;
 
-// Standard-Getränke als Kacheln; alles andere über die Suche
+// Standard-Getränke als Kacheln; alles andere über die Suche.
 // estMin = typische Trinkdauer für die Standardmenge (wird mit der Menge hochgerechnet)
-const BEER_SIZES = [200, 250, 300, 330, 400, 500, 1000];
+const BEER_SIZES = [200, 300, 330, 400, 500, 1000];
 const PRESETS = [
-  { emoji: '🍺', name: 'Bier', cat: 'bier', volumeMl: 500, abv: 5, estMin: 30, sizes: BEER_SIZES },
-  { emoji: '🍺', name: 'Pils', cat: 'bier', volumeMl: 330, abv: 4.8, estMin: 20, sizes: BEER_SIZES },
-  { emoji: '🍻', name: 'Weizen', cat: 'bier', volumeMl: 500, abv: 5.4, estMin: 30, sizes: [300, 330, 500] },
-  { emoji: '🍋', name: 'Radler', cat: 'bier', volumeMl: 500, abv: 2.5, estMin: 30, sizes: [330, 500, 1000] },
-  { emoji: '🍷', name: 'Wein', cat: 'wein', volumeMl: 200, abv: 12, estMin: 30, sizes: [100, 125, 150, 200, 250, 500] },
-  { emoji: '🥂', name: 'Sekt', cat: 'sekt', volumeMl: 100, abv: 11, estMin: 15, sizes: [100, 150, 200] },
-  { emoji: '🍹', name: 'Spritz', cat: 'sekt', volumeMl: 200, abv: 8, estMin: 30, sizes: [200, 300, 400] },
-  { emoji: '🍸', name: 'Longdrink', cat: 'longdrink', volumeMl: 40, abv: 40, estMin: 30, sizes: [20, 40, 60, 80] },
-  { emoji: '🥃', name: 'Shot', cat: 'schnaps', volumeMl: 20, abv: 40, estMin: 0, sizes: [20, 40] },
+  { icon: 'bier', name: 'Bier', cat: 'bier', volumeMl: 500, abv: 5, estMin: 30, sizes: BEER_SIZES },
+  { icon: 'pils', name: 'Pils', cat: 'bier', volumeMl: 330, abv: 4.8, estMin: 20, sizes: BEER_SIZES },
+  { icon: 'weizen', name: 'Weizen', cat: 'bier', volumeMl: 500, abv: 5.4, estMin: 30, sizes: [300, 330, 500] },
+  { icon: 'radler', name: 'Radler', cat: 'bier', volumeMl: 500, abv: 2.5, estMin: 30, sizes: [330, 500, 1000] },
+  { icon: 'wein', name: 'Wein', cat: 'wein', volumeMl: 200, abv: 12, estMin: 30, sizes: [100, 125, 150, 200, 250] },
+  { icon: 'sekt', name: 'Sekt', cat: 'sekt', volumeMl: 100, abv: 11, estMin: 15, sizes: [100, 150, 200] },
+  { icon: 'spritz', name: 'Spritz', cat: 'sekt', volumeMl: 200, abv: 8, estMin: 30, sizes: [200, 300, 400] },
+  { icon: 'longdrink', name: 'Longdrink', cat: 'longdrink', volumeMl: 40, abv: 40, estMin: 30, sizes: [20, 40, 60, 80] },
+  { icon: 'shot', name: 'Shot', cat: 'schnaps', volumeMl: 20, abv: 40, estMin: 0, sizes: [20, 40] },
 ];
 
-/** Typische Trinkdauer an die gewählte Menge anpassen (1 l Bier dauert länger als 0,33 l) */
-function scaledEstMin(base, volumeMl) {
-  const est = base?.estMin ?? estMinFor(base?.cat);
-  if (!est) return 0;
-  const ref = base?.defaultMl ?? base?.volumeMl;
-  if (!ref || !volumeMl) return est;
-  return Math.round(Math.min(120, Math.max(5, (est * volumeMl) / ref)));
+/** Typische Trinkdauer an die Menge anpassen (1 l Bier dauert länger als 0,33 l) */
+function scaledEstMin(baseEstMin, refMl, volumeMl) {
+  if (!baseEstMin) return 0;
+  if (!refMl || !volumeMl) return baseEstMin;
+  return Math.round(Math.min(120, Math.max(5, (baseEstMin * volumeMl) / refMl)));
 }
 
 // ---------- Speicher (nur lokal auf dem Gerät) ----------
@@ -48,6 +47,7 @@ const state = {
   drinks: store.get('pegel.drinks', []).filter((d) => d.time > Date.now() - KEEP_DRINKS_MS),
   fullStomach: store.get('pegel.fullStomach', false),
   presetSizes: store.get('pegel.presetSizes', {}),
+  addMode: 'start', // 'start' = Stoppuhr, 'past' = nachtragen
   query: '',
   cat: null,
   dlg: { mode: 'start', editingId: null, base: null },
@@ -56,14 +56,15 @@ const state = {
 
 const saveDrinks = () => store.set('pegel.drinks', state.drinks);
 const newId = () => crypto.randomUUID?.() ?? String(Date.now() + Math.random());
+const clone = (v) => JSON.parse(JSON.stringify(v));
 
 // ---------- Formatierung ----------
 const fmtBac = (v) => v.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtTime = (t) => new Date(t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 const fmtNum = (v, d = 1) => v.toLocaleString('de-DE', { maximumFractionDigits: d });
 const fmtVolume = (ml) => {
-  if (ml % 10 !== 0 && ml % 5 !== 0) return `${fmtNum(ml, 0)} ml`; // krumme Mengen genau
   if (ml >= 100 && ml % 10 !== 0) return `${fmtNum(ml, 0)} ml`; // z. B. 175 ml statt 0,18 l
+  if (ml < 100 && ml % 5 !== 0) return `${fmtNum(ml, 0)} ml`;
   return ml >= 100 ? `${fmtNum(ml / 1000, 2)} l` : `${fmtNum(ml / 10)} cl`;
 };
 const fmtDrinkMeta = (d) => `${fmtVolume(d.volumeMl)} · ${fmtNum(d.abv)} %`;
@@ -73,7 +74,7 @@ function fmtIn(t, now) {
   const h = Math.floor(mins / 60);
   const m = mins % 60;
   if (h === 0) return `in ${m} min`;
-  return `in ${h} h ${String(m).padStart(2, '0')} min`;
+  return `in ${h} h ${String(m).padStart(2, '0')}`;
 }
 
 function fmtDuration(min) {
@@ -98,54 +99,108 @@ function fmtDayPrefix(t, now) {
 }
 
 const $ = (id) => document.getElementById(id);
-const emojiOf = (d) => d.emoji ?? emojiFor(d.cat);
+const iconOf = (d) => d.icon ?? iconFor(d.cat);
 
 // ---------- Getränke & Modell ----------
 const finishedEnd = (d) => d.time + (d.durationMin ?? 0) * MIN;
+const runningDrink = () => state.drinks.find((d) => d.running);
 
-/** Laufende Getränke: Annahme fürs Modell – mindestens typische Dauer, sonst bis jetzt */
+/** Laufendes Getränk: fürs Modell mindestens die typische Dauer annehmen, sonst bis jetzt */
 function modelDrinks(now) {
   return state.drinks.map((d) => (d.running
     ? { ...d, durationMin: Math.max((now - d.time) / MIN, d.estMin ?? 20) }
     : d));
 }
 
-/** Neues Getränk ab jetzt: mit Stoppuhr, Shots direkt als getrunken */
-function startDrink(base) {
-  const now = Date.now();
-  const estMin = base.estMin ?? estMinFor(base.cat);
-  const d = {
-    id: newId(), name: base.name, cat: base.cat ?? 'custom', ...(base.emoji ? { emoji: base.emoji } : {}), volumeMl: base.volumeMl, abv: base.abv,
-    fullStomach: base.fullStomach ?? state.fullStomach, time: now, estMin,
-    ...(estMin > 0 ? { running: true, durationMin: null } : { durationMin: 0 }),
-  };
-  addDrink(d, estMin > 0 ? `${d.name} gestartet ⏱` : `${d.name} eingetragen`);
+function stopNow(d, now) {
+  d.running = false;
+  d.durationMin = Math.min(MAX_DURATION_MIN, Math.max(0, Math.round((now - d.time) / MIN)));
 }
 
-function addDrink(d, message) {
-  state.drinks.push(d);
+/** Es läuft höchstens ein Getränk. Ältere Stände (mehrere laufend) werden bereinigt. */
+function normalizeRunning() {
+  const running = state.drinks.filter((d) => d.running).sort((a, b) => a.time - b.time);
+  for (const d of running.slice(0, -1)) {
+    d.running = false;
+    d.durationMin = Math.max(1, d.estMin ?? 20);
+  }
+  if (running.length > 1) saveDrinks();
+}
+
+/** Änderung an den Getränken mit „Rückgängig“ */
+function commit(message, mutate) {
+  const snapshot = clone(state.drinks);
+  mutate();
   saveDrinks();
   render();
   showToast(message, () => {
-    state.drinks = state.drinks.filter((x) => x.id !== d.id);
+    state.drinks = snapshot;
     saveDrinks();
     render();
+  });
+}
+
+function rememberPresetSize(presetKey, ml) {
+  if (!presetKey) return;
+  state.presetSizes = { ...state.presetSizes, [presetKey]: ml };
+  store.set('pegel.presetSizes', state.presetSizes);
+  renderPresets();
+}
+
+/** Getränk angetippt: Stoppuhr starten oder (Modus „Nachtragen“) den Zeitraum abfragen */
+function choose(base) {
+  if (!ensureProfile()) return;
+  if (state.addMode === 'past') openDrinkDialog({ base });
+  else startDrink(base);
+}
+
+/**
+ * Startet ein Getränk ab jetzt. Ein laufendes Getränk wird dabei automatisch gestoppt.
+ * Shots (ohne Trinkdauer) werden direkt eingetragen und stoppen nichts.
+ */
+function startDrink(base) {
+  const now = Date.now();
+  const cat = base.cat ?? 'custom';
+  const baseEstMin = base.baseEstMin ?? base.estMin ?? estMinFor(cat);
+  const refMl = base.defaultMl ?? base.volumeMl;
+  const d = {
+    id: newId(), name: base.name, cat, icon: base.icon ?? iconFor(cat),
+    volumeMl: base.volumeMl, abv: base.abv, fullStomach: base.fullStomach ?? state.fullStomach,
+    time: now, baseEstMin, refMl, estMin: scaledEstMin(baseEstMin, refMl, base.volumeMl),
+    sizes: base.sizes ?? [], presetKey: base.presetKey ?? null,
+  };
+  const prev = d.estMin > 0 ? runningDrink() : null;
+  let message;
+  if (d.estMin > 0) {
+    d.running = true;
+    d.durationMin = null;
+    message = prev ? `${d.name} gestartet · ${prev.name} gestoppt` : `${d.name} gestartet`;
+  } else {
+    d.durationMin = 0;
+    message = `${d.name} eingetragen`;
+  }
+  commit(message, () => {
+    if (prev) stopNow(state.drinks.find((x) => x.id === prev.id), now);
+    state.drinks.push(d);
   });
 }
 
 function finishDrink(id) {
   const d = state.drinks.find((x) => x.id === id);
   if (!d?.running) return;
-  const before = { ...d };
-  d.running = false;
-  d.durationMin = Math.min(MAX_DURATION_MIN, Math.max(0, Math.round((Date.now() - d.time) / MIN)));
+  const now = Date.now();
+  const mins = Math.round((now - d.time) / MIN);
+  commit(`${d.name} gestoppt · ${fmtDuration(mins)}`, () => stopNow(state.drinks.find((x) => x.id === id), now));
+}
+
+function setRunningSize(ml) {
+  const d = runningDrink();
+  if (!d) return;
+  d.volumeMl = ml;
+  d.estMin = scaledEstMin(d.baseEstMin ?? d.estMin, d.refMl, ml) || d.estMin;
   saveDrinks();
+  rememberPresetSize(d.presetKey, ml);
   render();
-  showToast(`${d.name} fertig · ${fmtDuration(d.durationMin)}`, () => {
-    Object.assign(d, before);
-    saveDrinks();
-    render();
-  });
 }
 
 // ---------- Rendering ----------
@@ -159,57 +214,63 @@ function render() {
   $('hero').dataset.level = cls.level;
   $('bac-value').textContent = fmtBac(s.current);
   $('status-label').textContent = cls.label;
-  $('status-note').textContent = hasDrinks ? cls.note : 'Such dein Getränk und starte die Stoppuhr. Der Wert wird laufend neu berechnet.';
+  $('status-note').textContent = hasDrinks ? cls.note : '';
+  $('status-note').hidden = !hasDrinks;
+  $('gauge-fill').style.width = `${Math.max(2, Math.min(100, (s.current / 1.6) * 100)).toFixed(1)}%`;
 
-  if (!hasDrinks) {
-    $('fact-05').textContent = '–';
-    $('fact-sober').textContent = '–';
-    $('fact-peak').textContent = '–';
-  } else {
-    $('fact-05').innerHTML = s.below05
-      ? `${fmtTime(s.below05)} <small>${fmtIn(s.below05, now)}</small>`
-      : 'jetzt schon';
-    $('fact-sober').innerHTML = s.soberAt
-      ? `${fmtDayPrefix(s.soberAt, now)}${fmtTime(s.soberAt)} <small>bis ca. ${fmtTime(s.soberLatest ?? s.soberAt)}</small>`
-      : 'jetzt';
+  const below05 = !hasDrinks ? '–' : s.below05 ? fmtTime(s.below05) : 'jetzt';
+  const sober = !hasDrinks ? '–' : s.soberAt ? `${fmtDayPrefix(s.soberAt, now)}${fmtTime(s.soberAt)}` : 'jetzt';
+  $('hero-05').textContent = below05;
+  $('hero-sober').textContent = sober;
+
+  if (hasDrinks) {
     $('fact-peak').innerHTML = s.peak
       ? `${fmtBac(s.peak.bac)} ‰ <small>${s.peak.t > now ? 'um' : 'war'} ${fmtTime(s.peak.t)}</small>`
       : '–';
+    $('fact-05').innerHTML = s.below05 ? `${below05} <small>${fmtIn(s.below05, now)}</small>` : 'jetzt schon';
+    $('fact-sober').innerHTML = s.soberAt
+      ? `${sober} <small>bis ca. ${fmtTime(s.soberLatest ?? s.soberAt)}</small>`
+      : 'jetzt';
   }
   $('fact-grams').textContent = `${fmtNum(s.totalGrams, 0)} g`;
 
   renderChart(s, drinks, now);
   renderRunning(now);
   renderDrinks(now);
+  renderPresets();
 }
 
-function renderRunning(now) {
-  const running = state.drinks.filter((d) => d.running).sort((a, b) => a.time - b.time);
-  $('running-card').hidden = running.length === 0;
-  $('running-list').replaceChildren(...running.map((d) => {
-    const li = document.createElement('li');
-    li.innerHTML = `
-      <button type="button" class="info"><span class="n"></span><span class="meta"></span></button>
-      <span class="timer"></span>
-      <button type="button" class="primary">Fertig</button>`;
-    li.querySelector('.n').textContent = `${emojiOf(d)} ${d.name}`;
-    const long = now - d.time > 2 * HOUR;
-    li.querySelector('.meta').textContent =
-      `seit ${fmtTime(d.time)} · ${fmtDrinkMeta(d)}${long ? ' · noch dran?' : ''}`;
-    const timer = li.querySelector('.timer');
-    timer.dataset.start = d.time;
-    timer.textContent = fmtStopwatch(now - d.time);
-    li.querySelector('.info').addEventListener('click', () => openDrinkDialog({ drink: d }));
-    li.querySelector('.primary').addEventListener('click', () => finishDrink(d.id));
-    return li;
+function sizeChips(container, sizes, current, onPick) {
+  container.replaceChildren(...sizes.map((ml) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'size-chip';
+    b.textContent = fmtVolume(ml);
+    b.dataset.ml = ml;
+    b.setAttribute('aria-pressed', String(Number(current) === ml));
+    b.addEventListener('click', () => onPick(ml));
+    return b;
   }));
 }
 
+function renderRunning(now) {
+  const d = runningDrink();
+  $('run-active').hidden = !d;
+  $('run-idle').hidden = !!d;
+  if (!d) return;
+  $('run-icon').replaceChildren(icon(iconOf(d), 26));
+  $('run-name').textContent = d.name;
+  const long = now - d.time > 2 * HOUR;
+  $('run-meta').textContent = `seit ${fmtTime(d.time)} · ${fmtNum(d.abv)} %${long ? ' · noch dran?' : ''}`;
+  $('run-timer').dataset.start = d.time;
+  $('run-timer').textContent = fmtStopwatch(now - d.time);
+  const sizes = [...new Set([...(d.sizes ?? []), d.volumeMl])].sort((a, b) => a - b);
+  sizeChips($('run-sizes'), sizes, d.volumeMl, setRunningSize);
+}
+
 function tickTimers() {
-  const now = Date.now();
-  document.querySelectorAll('.timer[data-start]').forEach((el) => {
-    el.textContent = fmtStopwatch(now - Number(el.dataset.start));
-  });
+  const el = $('run-timer');
+  if (el.dataset.start && !$('run-active').hidden) el.textContent = fmtStopwatch(Date.now() - Number(el.dataset.start));
 }
 
 function renderDrinks(now) {
@@ -218,22 +279,22 @@ function renderDrinks(now) {
     const li = document.createElement('li');
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.innerHTML = `
-      <span class="time"></span>
-      <span><span class="n"></span><br><span class="meta"></span></span>
-      <span class="grams"></span>
-      <span class="chev" aria-hidden="true">›</span>`;
-    btn.querySelector('.time').textContent = fmtTime(d.time);
-    btn.querySelector('.n').textContent = `${emojiOf(d)} ${d.name}`;
+    btn.innerHTML = '<span class="txt"><span class="n"></span><span class="meta"></span></span><span class="grams"></span>';
+    btn.prepend(icon(iconOf(d), 24));
+    const chev = icon('chevron', 16);
+    chev.classList.add('chev');
+    btn.append(chev);
+    btn.querySelector('.n').textContent = d.name;
+    const span = d.durationMin ? `${fmtTime(d.time)} bis ${fmtTime(finishedEnd(d))}` : fmtTime(d.time);
     btn.querySelector('.meta').textContent =
-      `${fmtDayPrefix(d.time, now)}${d.durationMin ? `bis ${fmtTime(finishedEnd(d))} · ` : ''}${fmtDrinkMeta(d)}${d.fullStomach ? ' · gegessen' : ''}`;
+      `${fmtDayPrefix(d.time, now)}${span} · ${fmtDrinkMeta(d)}${d.fullStomach ? ' · gegessen' : ''}`;
     btn.querySelector('.grams').textContent = `${fmtNum(alcoholGrams(d.volumeMl, d.abv), 0)} g`;
     btn.addEventListener('click', () => openDrinkDialog({ drink: d }));
     li.append(btn);
     return li;
   }));
-  $('drink-empty').hidden = state.drinks.length > 0;
-  $('drink-empty').textContent = state.drinks.length ? '' : 'Noch nichts eingetragen.';
+  $('drink-empty').hidden = drinks.length > 0;
+  $('drink-empty').textContent = state.drinks.length ? 'Noch kein Getränk fertig.' : 'Noch nichts eingetragen.';
   $('drink-edit-hint').hidden = drinks.length === 0;
   $('btn-clear').hidden = state.drinks.length === 0;
 }
@@ -288,25 +349,62 @@ function renderChart(s, drinks, now) {
   }
   if (future.length > 1) nodes.push(el('path', { class: 'line-future', d: path(future) }));
 
-  for (const d of drinks) {
-    if (d.durationMin) nodes.push(el('line', { class: 'drink-span', x1: x(d.time), x2: x(finishedEnd(d)), y1: y(0), y2: y(0) }));
-    else nodes.push(el('circle', { class: 'drink-tick', cx: x(d.time), cy: y(0), r: 2.5 }));
+  for (const d of state.drinks) {
+    const end = d.running ? now : finishedEnd(d);
+    if (end > d.time) nodes.push(el('line', { class: d.running ? 'drink-span live' : 'drink-span', x1: x(d.time), x2: x(end), y1: y(0), y2: y(0) }));
+    else nodes.push(el('circle', { class: 'drink-tick', cx: x(d.time), cy: y(0), r: 3 }));
   }
 
   if (now >= t0 && now <= t1) {
     nodes.push(el('line', { class: 'now', x1: x(now), x2: x(now), y1: T, y2: y(0) }));
-    nodes.push(el('circle', { class: 'now-dot', cx: x(now), cy: y(s.current), r: 4 }));
+    nodes.push(el('circle', { class: 'now-dot', cx: x(now), cy: y(s.current), r: 5 }));
   }
   svg.replaceChildren(...nodes);
 }
 
-// ---------- Suche & Schnellstart ----------
+// ---------- Getränk starten: Kacheln, Suche ----------
+function presetBase(preset) {
+  return {
+    ...preset,
+    defaultMl: preset.volumeMl,
+    volumeMl: state.presetSizes[preset.name] ?? preset.volumeMl,
+    presetKey: preset.name,
+  };
+}
+
+function renderPresets() {
+  const run = runningDrink();
+  $('presets').replaceChildren(...PRESETS.map((preset) => {
+    const p = presetBase(preset);
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = run?.presetKey === p.name ? 'preset active' : 'preset';
+    b.innerHTML = '<span class="name"></span><span class="meta"></span>';
+    b.prepend(icon(p.icon, 26));
+    b.querySelector('.name').textContent = p.name;
+    b.querySelector('.meta').textContent = fmtDrinkMeta(p);
+    b.addEventListener('click', () => choose(p));
+    return b;
+  }));
+}
+
+function renderAddMode() {
+  document.querySelectorAll('[data-addmode]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.addmode === state.addMode)));
+  $('add-hint').textContent = state.addMode === 'start'
+    ? 'Antippen startet die Stoppuhr. Ein neues Getränk stoppt das laufende, Shots werden direkt eingetragen.'
+    : 'Antippen und eintragen, von wann bis wann du es getrunken hast.';
+}
+document.querySelectorAll('[data-addmode]').forEach((b) => b.addEventListener('click', () => {
+  state.addMode = b.dataset.addmode;
+  renderAddMode();
+}));
+
 function renderCats() {
   const btns = Object.entries(CATEGORIES).map(([key, c]) => {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'cat';
-    b.textContent = `${c.emoji} ${c.label}`;
+    b.textContent = c.label;
     b.setAttribute('aria-pressed', String(state.cat === key));
     b.addEventListener('click', () => {
       state.cat = state.cat === key ? null : key;
@@ -328,29 +426,46 @@ function renderAdd() {
   const hits = searchDrinks(q, { cat: state.cat, limit: q ? 40 : 200 });
   const items = hits.map((d) => {
     const li = document.createElement('li');
-    li.innerHTML = '<button type="button"><span class="e"></span><span class="n"></span><span class="meta"></span></button>';
-    li.querySelector('.e').textContent = emojiFor(d.cat);
+    li.innerHTML = '<button type="button"><span><span class="n"></span><span class="c"></span></span><span class="meta"></span></button>';
+    const btn = li.querySelector('button');
+    btn.prepend(icon(iconFor(d.cat), 24));
     li.querySelector('.n').textContent = d.name;
+    li.querySelector('.c').textContent = CATEGORIES[d.cat].label;
     li.querySelector('.meta').textContent = fmtDrinkMeta(d);
-    li.querySelector('button').addEventListener('click', () => ensureProfile() && openDrinkDialog({ base: d }));
+    btn.addEventListener('click', () => {
+      choose({ ...d, id: undefined, defaultMl: d.volumeMl, sizes: sizesFor(d) });
+      if (state.addMode === 'start') resetSearch();
+    });
     return li;
   });
   if (q && !hits.some((d) => d.name.toLowerCase() === q.toLowerCase())) {
     const li = document.createElement('li');
-    li.innerHTML = '<button type="button"><span class="e">＋</span><span class="n new"></span><span class="meta">eigenes</span></button>';
+    li.innerHTML = '<button type="button"><span class="n new"></span><span class="meta">eigenes Getränk</span></button>';
+    const btn = li.querySelector('button');
+    const plus = icon('plus', 24);
+    plus.classList.add('new-ico');
+    btn.prepend(plus);
     li.querySelector('.n').textContent = `„${q}“ selbst anlegen`;
-    li.querySelector('button').addEventListener('click', () => ensureProfile() && openDrinkDialog({
+    btn.addEventListener('click', () => ensureProfile() && openDrinkDialog({
       base: { name: q, cat: state.cat ?? 'custom', volumeMl: '', abv: '' },
     }));
     items.push(li);
   }
-  if (!hits.length && !q) {
+  if (!items.length) {
     const li = document.createElement('li');
     li.className = 'none';
     li.textContent = 'Keine Treffer.';
     items.push(li);
   }
   $('results').replaceChildren(...items);
+}
+
+function resetSearch() {
+  state.query = '';
+  state.cat = null;
+  $('search').value = '';
+  renderCats();
+  renderAdd();
 }
 
 $('search').addEventListener('input', (e) => { state.query = e.target.value; renderAdd(); });
@@ -361,22 +476,10 @@ $('search-clear').addEventListener('click', () => {
   $('search').focus();
 });
 
-function renderPresets() {
-  $('presets').replaceChildren(...PRESETS.map((preset) => {
-    const p = { ...preset, defaultMl: preset.volumeMl, volumeMl: state.presetSizes[preset.name] ?? preset.volumeMl, presetKey: preset.name };
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'preset';
-    b.innerHTML = '<span class="emoji"></span><span class="name"></span><span class="meta"></span>';
-    b.querySelector('.emoji').textContent = p.emoji;
-    b.querySelector('.name').textContent = p.name;
-    b.querySelector('.meta').textContent = fmtDrinkMeta(p);
-    b.addEventListener('click', () => ensureProfile() && openDrinkDialog({ base: p }));
-    return b;
-  }));
-}
+$('run-stop').addEventListener('click', () => { const d = runningDrink(); if (d) finishDrink(d.id); });
+$('run-info').addEventListener('click', () => { const d = runningDrink(); if (d) openDrinkDialog({ drink: d }); });
 
-// ---------- Getränke-Dialog ----------
+// ---------- Getränke-Dialog (nachtragen, ändern, eigenes Getränk) ----------
 const toTimeInput = (t) => {
   const d = new Date(t);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -402,84 +505,75 @@ function readSpan() {
   return { time, durationMin: Math.round((end.getTime() - time) / MIN) };
 }
 
-function updateDurationHint() {
+function updateSummary() {
   const f = $('form-drink');
-  const usesEnd = state.dlg.mode === 'past';
+  const { mode } = state.dlg;
+  const ml = Number(f.elements.volumeMl.value), abv = Number(f.elements.abv.value);
+  $('drink-grams').innerHTML = ml > 0 && f.elements.abv.value !== '' && abv >= 0
+    ? `Reiner Alkohol <b>${fmtNum(alcoholGrams(ml, abv), 1)} g</b>`
+    : '';
+
   f.elements.end.setCustomValidity('');
-  if (!usesEnd || !f.elements.start.value || !f.elements.end.value) { $('drink-duration').textContent = ''; return; }
-  const { durationMin } = readSpan();
-  const tooLong = durationMin > MAX_DURATION_MIN;
-  f.elements.end.setCustomValidity(tooLong ? 'Höchstens 6 Stunden pro Getränk' : '');
-  $('drink-duration').textContent = tooLong
-    ? 'Höchstens 6 Stunden pro Getränk. Trag lieber mehrere Getränke ein.'
-    : `Trinkdauer: ${fmtDuration(durationMin)}`;
+  const dur = $('drink-duration');
+  if (mode === 'past' && f.elements.start.value && f.elements.end.value) {
+    const { durationMin } = readSpan();
+    if (durationMin > MAX_DURATION_MIN) {
+      f.elements.end.setCustomValidity('Höchstens 6 Stunden pro Getränk');
+      dur.innerHTML = '<span class="warn">Höchstens 6 Stunden pro Getränk</span>';
+    } else {
+      dur.innerHTML = `Trinkdauer <b>${fmtDuration(durationMin)}</b>`;
+    }
+  } else if (mode === 'start') {
+    dur.textContent = state.dlg.instant ? 'Wird sofort eingetragen' : 'Stoppuhr startet jetzt';
+  } else if (mode === 'running') {
+    dur.textContent = 'Stoppuhr läuft';
+  } else {
+    dur.textContent = '';
+  }
 }
 
-/**
- * Modi: 'start' (neu, Stoppuhr ab jetzt), 'past' (von–bis), 'running' (läuft, nur Startzeit änderbar)
- */
+/** Modi: 'start' (Stoppuhr ab jetzt), 'past' (von–bis), 'running' (läuft, nur Startzeit änderbar) */
 function setMode(mode) {
   state.dlg.mode = mode;
   const f = $('form-drink');
   const isNew = !state.dlg.editingId;
-  const instant = (state.dlg.base?.estMin ?? estMinFor(state.dlg.base?.cat)) === 0;
   document.querySelectorAll('[data-mode]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.mode === mode)));
   $('time-fields').hidden = mode === 'start';
   $('end-label').hidden = mode === 'running';
   $('start-label').firstChild.textContent = mode === 'running' ? 'Gestartet um' : 'Getrunken von';
-  $('start-hint').hidden = mode !== 'start';
-  $('start-hint').textContent = instant
-    ? 'Wird als gerade eben getrunken eingetragen.'
-    : 'Die Stoppuhr läuft, bis du auf „Fertig“ tippst.';
   f.elements.start.required = mode !== 'start';
   f.elements.end.required = mode === 'past';
-  $('drink-submit').textContent = !isNew ? 'Speichern' : mode === 'start' ? (instant ? 'Eintragen' : '▶ Starten') : 'Eintragen';
-  updateDurationHint();
+  $('drink-submit').textContent = !isNew ? 'Speichern' : mode === 'start' && !state.dlg.instant ? 'Starten' : 'Eintragen';
+  updateSummary();
 }
 
-function renderSizeChips(sizes, current) {
-  $('size-chips').replaceChildren(...sizes.map((ml) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'chip';
-    b.textContent = fmtVolume(ml);
-    b.dataset.ml = ml;
-    b.setAttribute('aria-pressed', String(Number(current) === ml));
-    b.addEventListener('click', () => {
-      $('form-drink').elements.volumeMl.value = ml;
-      renderSizeChips(sizes, ml);
-      updateGrams();
-    });
-    return b;
-  }));
-}
-
-function updateGrams() {
-  const f = $('form-drink');
-  const ml = Number(f.elements.volumeMl.value), abv = Number(f.elements.abv.value);
-  $('drink-grams').textContent = ml > 0 && abv >= 0 && f.elements.abv.value !== ''
-    ? `= ${fmtNum(alcoholGrams(ml, abv), 1)} g reiner Alkohol`
-    : '';
+function dialogSizeChips(sizes, current) {
+  sizeChips($('size-chips'), sizes, current, (ml) => {
+    $('form-drink').elements.volumeMl.value = ml;
+    dialogSizeChips(sizes, ml);
+    updateSummary();
+  });
 }
 
 function openDrinkDialog({ base = null, drink = null }) {
   const now = Date.now();
   const src = drink ?? base;
-  state.dlg = { mode: 'start', editingId: drink?.id ?? null, base: src };
+  const cat = src.cat ?? 'custom';
+  const baseEstMin = src.baseEstMin ?? src.estMin ?? estMinFor(cat);
+  state.dlg = { mode: 'start', editingId: drink?.id ?? null, base: src, instant: baseEstMin === 0 };
   const f = $('form-drink');
   f.elements.name.value = src.name ?? '';
   f.elements.volumeMl.value = src.volumeMl ?? '';
   f.elements.abv.value = src.abv ?? '';
   f.elements.fullStomach.checked = drink?.fullStomach ?? state.fullStomach;
 
-  const sizes = src.sizes ?? (src.cat && CATEGORIES[src.cat] ? sizesFor(src) : []);
-  renderSizeChips(sizes, src.volumeMl);
-  updateGrams();
-  const note = CATEGORIES[src.cat]?.note;
+  const sizes = src.sizes?.length ? src.sizes : (CATEGORIES[cat] && src.volumeMl ? sizesFor({ cat, volumeMl: src.volumeMl }) : []);
+  dialogSizeChips(sizes, src.volumeMl);
+  const note = CATEGORIES[cat]?.note;
   $('drink-note').hidden = !note;
   $('drink-note').textContent = note ?? '';
 
-  const est = scaledEstMin(src, src.volumeMl);
+  const est = scaledEstMin(baseEstMin, src.refMl ?? src.defaultMl ?? src.volumeMl, src.volumeMl);
   if (drink) {
     f.elements.start.value = toTimeInput(drink.time);
     f.elements.end.value = toTimeInput(drink.running ? now : finishedEnd(drink));
@@ -488,23 +582,21 @@ function openDrinkDialog({ base = null, drink = null }) {
     f.elements.end.value = toTimeInput(now);
   }
 
-  $('drink-title').textContent = drink ? 'Getränk bearbeiten' : `${src.emoji ?? emojiFor(src.cat)} ${src.presetKey ? `${src.name}: Menge wählen` : 'Getränk hinzufügen'}`;
+  $('drink-icon').replaceChildren(icon(iconOf(src), 26));
+  $('drink-title').textContent = drink ? 'Getränk ändern' : state.addMode === 'past' ? 'Getränk nachtragen' : 'Getränk hinzufügen';
   $('mode-switch').hidden = !!drink;
   $('drink-delete').hidden = !drink;
-  $('drink-finish').hidden = !drink?.running;
-  setMode(drink ? (drink.running ? 'running' : 'past') : 'start');
+  setMode(drink ? (drink.running ? 'running' : 'past') : state.addMode);
   $('dlg-drink').showModal();
 }
 
 document.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
-$('form-drink').elements.start.addEventListener('input', updateDurationHint);
-$('form-drink').elements.end.addEventListener('input', updateDurationHint);
+for (const name of ['start', 'end', 'abv']) $('form-drink').elements[name].addEventListener('input', updateSummary);
 $('form-drink').elements.volumeMl.addEventListener('input', (e) => {
-  const ml = Number(e.target.value);
-  document.querySelectorAll('#size-chips .chip').forEach((c) => c.setAttribute('aria-pressed', String(c.dataset.ml === String(ml))));
-  updateGrams();
+  const ml = String(Number(e.target.value));
+  document.querySelectorAll('#size-chips .size-chip').forEach((c) => c.setAttribute('aria-pressed', String(c.dataset.ml === ml)));
+  updateSummary();
 });
-$('form-drink').elements.abv.addEventListener('input', updateGrams);
 
 $('form-drink').addEventListener('submit', () => {
   const f = $('form-drink');
@@ -517,48 +609,45 @@ $('form-drink').addEventListener('submit', () => {
   };
 
   if (editingId) {
-    const patch = mode === 'running'
-      ? { time: fromTimeInput(f.elements.start.value) }
-      : readSpan();
-    state.drinks = state.drinks.map((d) => (d.id === editingId ? { ...d, ...data, ...patch } : d));
-    saveDrinks();
-    render();
+    const patch = mode === 'running' ? { time: fromTimeInput(f.elements.start.value) } : readSpan();
+    commit(`${data.name} geändert`, () => {
+      state.drinks = state.drinks.map((d) => {
+        if (d.id !== editingId) return d;
+        const next = { ...d, ...data, ...patch };
+        next.estMin = scaledEstMin(d.baseEstMin ?? d.estMin, d.refMl, data.volumeMl) || d.estMin;
+        return next;
+      });
+    });
     return;
   }
 
   const cat = base?.cat ?? 'custom';
-  const estMin = scaledEstMin(base, data.volumeMl);
-  const extra = base?.emoji ? { emoji: base.emoji } : {};
-  if (base?.presetKey) {
-    state.presetSizes = { ...state.presetSizes, [base.presetKey]: data.volumeMl };
-    store.set('pegel.presetSizes', state.presetSizes);
-    renderPresets();
-  }
+  const common = {
+    ...data, cat, icon: base?.icon, sizes: base?.sizes, presetKey: base?.presetKey,
+    baseEstMin: base?.baseEstMin ?? base?.estMin ?? estMinFor(cat),
+    defaultMl: base?.defaultMl ?? (base?.volumeMl || data.volumeMl),
+  };
+  rememberPresetSize(base?.presetKey, data.volumeMl);
   if (mode === 'start') {
-    startDrink({ ...data, ...extra, cat, estMin });
+    startDrink(common);
   } else {
-    addDrink({ id: newId(), cat, ...extra, ...data, ...readSpan(), estMin }, `${data.name} eingetragen`);
+    const d = {
+      id: newId(), ...data, cat, icon: common.icon ?? iconFor(cat), ...readSpan(),
+      baseEstMin: common.baseEstMin, refMl: common.defaultMl,
+      estMin: scaledEstMin(common.baseEstMin, common.defaultMl, data.volumeMl),
+      sizes: common.sizes ?? [], presetKey: common.presetKey ?? null,
+    };
+    commit(`${d.name} eingetragen`, () => state.drinks.push(d));
   }
-  state.query = '';
-  $('search').value = '';
-  renderAdd();
+  resetSearch();
 });
 
 $('drink-cancel').addEventListener('click', () => $('dlg-drink').close());
-$('drink-finish').addEventListener('click', () => {
-  const id = state.dlg.editingId;
-  $('dlg-drink').close();
-  finishDrink(id);
-});
 $('drink-delete').addEventListener('click', () => {
-  const removed = state.drinks.find((d) => d.id === state.dlg.editingId);
-  state.drinks = state.drinks.filter((d) => d.id !== state.dlg.editingId);
-  saveDrinks();
+  const id = state.dlg.editingId;
+  const removed = state.drinks.find((d) => d.id === id);
   $('dlg-drink').close();
-  render();
-  if (removed) {
-    showToast(`${removed.name} gelöscht`, () => { state.drinks.push(removed); saveDrinks(); render(); });
-  }
+  if (removed) commit(`${removed.name} gelöscht`, () => { state.drinks = state.drinks.filter((d) => d.id !== id); });
 });
 
 // ---------- Profil-Dialog ----------
@@ -604,7 +693,7 @@ function showToast(text, onUndo) {
   $('toast-undo').hidden = !onUndo;
   $('toast').hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { $('toast').hidden = true; state.undo = null; }, 5000);
+  toastTimer = setTimeout(() => { $('toast').hidden = true; state.undo = null; }, 6000);
 }
 
 $('toast-undo').addEventListener('click', () => {
@@ -626,19 +715,16 @@ document.querySelectorAll('[data-stomach]').forEach((b) => b.addEventListener('c
 
 $('btn-clear').addEventListener('click', () => {
   if (!confirm('Alle eingetragenen Getränke löschen?')) return;
-  const backup = state.drinks;
-  state.drinks = [];
-  saveDrinks();
-  render();
-  showToast('Alle Getränke gelöscht', () => { state.drinks = backup; saveDrinks(); render(); });
+  commit('Alle Getränke gelöscht', () => { state.drinks = []; });
 });
 
 document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
 setInterval(tickTimers, SEC);
 setInterval(render, 30 * SEC);
 
+normalizeRunning();
 $('version').textContent = `Version ${APP_VERSION}`;
-renderPresets();
+renderAddMode();
 renderCats();
 renderAdd();
 renderStomach();
