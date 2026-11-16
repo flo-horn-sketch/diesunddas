@@ -1,6 +1,6 @@
 // Service Worker: hält die App offline verfügbar.
 // Bei Änderungen an den Dateien VERSION erhöhen, damit Handys die neue Version laden.
-const VERSION = 'pegel-v3';
+const VERSION = 'pegel-v4';
 const ASSETS = [
   './', 'index.html', 'css/style.css', 'js/app.js', 'js/bac.js', 'js/drinks.js', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
@@ -18,11 +18,12 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-// Netzwerk zuerst (damit Updates ankommen), sonst Cache
+// Netzwerk zuerst und am HTTP-Cache vorbei (GitHub Pages erlaubt sonst 10 min alte Dateien),
+// offline aus dem Cache
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request, { cache: 'no-cache' })
       .then((res) => {
         const copy = res.clone();
         caches.open(VERSION).then((c) => c.put(e.request, copy));

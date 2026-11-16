@@ -1,19 +1,25 @@
 import { summarize, classify, alcoholGrams, isValidProfile } from './bac.js';
 import { CATEGORIES, searchDrinks, sizesFor, emojiFor, estMinFor } from './drinks.js';
 
+export const APP_VERSION = 4;
+
 const SEC = 1000;
 const MIN = 60 * SEC;
 const HOUR = 60 * MIN;
 const KEEP_DRINKS_MS = 36 * HOUR;
 const MAX_DURATION_MIN = 6 * 60;
 
-const DEFAULT_RECENT = [
-  { name: 'Helles', cat: 'bier', volumeMl: 500, abv: 5 },
-  { name: 'Pils', cat: 'bier', volumeMl: 330, abv: 4.8 },
-  { name: 'Weißwein', cat: 'wein', volumeMl: 200, abv: 12 },
-  { name: 'Aperol Spritz', cat: 'sekt', volumeMl: 200, abv: 8 },
-  { name: 'Gin Tonic', cat: 'longdrink', volumeMl: 40, abv: 40 },
-  { name: 'Wodka', cat: 'schnaps', volumeMl: 20, abv: 40 },
+// Standard-Getränke als Kacheln; alles andere über die Suche
+const PRESETS = [
+  { emoji: '🍺', name: 'Bier', cat: 'bier', volumeMl: 500, abv: 5 },
+  { emoji: '🍺', name: 'Pils', cat: 'bier', volumeMl: 330, abv: 4.8, estMin: 20 },
+  { emoji: '🍻', name: 'Weizen', cat: 'bier', volumeMl: 500, abv: 5.4 },
+  { emoji: '🍋', name: 'Radler', cat: 'bier', volumeMl: 500, abv: 2.5 },
+  { emoji: '🍷', name: 'Wein', cat: 'wein', volumeMl: 200, abv: 12 },
+  { emoji: '🥂', name: 'Sekt', cat: 'sekt', volumeMl: 100, abv: 11, estMin: 15 },
+  { emoji: '🍹', name: 'Spritz', cat: 'sekt', volumeMl: 200, abv: 8, estMin: 30 },
+  { emoji: '🍸', name: 'Longdrink', cat: 'longdrink', volumeMl: 40, abv: 40 },
+  { emoji: '🥃', name: 'Shot', cat: 'schnaps', volumeMl: 20, abv: 40 },
 ];
 
 // ---------- Speicher (nur lokal auf dem Gerät) ----------
@@ -30,7 +36,6 @@ const state = {
   profile: store.get('pegel.profile', null),
   drinks: store.get('pegel.drinks', []).filter((d) => d.time > Date.now() - KEEP_DRINKS_MS),
   fullStomach: store.get('pegel.fullStomach', false),
-  recent: store.get('pegel.recent', DEFAULT_RECENT),
   query: '',
   cat: null,
   dlg: { mode: 'start', editingId: null, base: null },
@@ -89,19 +94,12 @@ function modelDrinks(now) {
     : d));
 }
 
-function rememberRecent(d) {
-  const item = { name: d.name, cat: d.cat, volumeMl: d.volumeMl, abv: d.abv };
-  const key = (x) => `${x.name}|${x.volumeMl}|${x.abv}`;
-  state.recent = [item, ...state.recent.filter((x) => key(x) !== key(item))].slice(0, 8);
-  store.set('pegel.recent', state.recent);
-}
-
 /** Neues Getränk ab jetzt: mit Stoppuhr, Shots direkt als getrunken */
 function startDrink(base) {
   const now = Date.now();
   const estMin = base.estMin ?? estMinFor(base.cat);
   const d = {
-    id: newId(), name: base.name, cat: base.cat ?? 'custom', volumeMl: base.volumeMl, abv: base.abv,
+    id: newId(), name: base.name, cat: base.cat ?? 'custom', ...(base.emoji ? { emoji: base.emoji } : {}), volumeMl: base.volumeMl, abv: base.abv,
     fullStomach: base.fullStomach ?? state.fullStomach, time: now, estMin,
     ...(estMin > 0 ? { running: true, durationMin: null } : { durationMin: 0 }),
   };
@@ -110,7 +108,6 @@ function startDrink(base) {
 
 function addDrink(d, message) {
   state.drinks.push(d);
-  rememberRecent(d);
   saveDrinks();
   render();
   showToast(message, () => {
@@ -307,23 +304,9 @@ function renderCats() {
 
 function renderAdd() {
   const searching = !!state.query.trim() || !!state.cat;
-  $('recent-wrap').hidden = searching;
   $('results').hidden = !searching;
   $('search-clear').hidden = !state.query;
-
-  if (!searching) {
-    $('recent').replaceChildren(...state.recent.map((r) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'chip';
-      b.innerHTML = '<span></span><small></small>';
-      b.firstChild.textContent = `${emojiFor(r.cat)} ${r.name}`;
-      b.lastChild.textContent = fmtVolume(r.volumeMl);
-      b.addEventListener('click', () => ensureProfile() && startDrink(r));
-      return b;
-    }));
-    return;
-  }
+  if (!searching) return;
 
   const q = state.query.trim();
   const hits = searchDrinks(q, { cat: state.cat, limit: q ? 40 : 200 });
@@ -361,6 +344,20 @@ $('search-clear').addEventListener('click', () => {
   renderAdd();
   $('search').focus();
 });
+
+function renderPresets() {
+  $('presets').replaceChildren(...PRESETS.map((p) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'preset';
+    b.innerHTML = '<span class="emoji"></span><span class="name"></span><span class="meta"></span>';
+    b.querySelector('.emoji').textContent = p.emoji;
+    b.querySelector('.name').textContent = p.name;
+    b.querySelector('.meta').textContent = fmtDrinkMeta(p);
+    b.addEventListener('click', () => ensureProfile() && startDrink(p));
+    return b;
+  }));
+}
 
 // ---------- Getränke-Dialog ----------
 const toTimeInput = (t) => {
@@ -604,12 +601,24 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) rend
 setInterval(tickTimers, SEC);
 setInterval(render, 30 * SEC);
 
+$('version').textContent = `Version ${APP_VERSION}`;
+renderPresets();
 renderCats();
 renderAdd();
 renderStomach();
 render();
 if (!isValidProfile(state.profile)) openProfileDialog();
 
+// Updates: beim Zurückkehren in die App nach neuer Version schauen und dann einmal neu laden
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloading) return;
+    reloading = true;
+    location.reload();
+  });
+  navigator.serviceWorker.register('sw.js').then((reg) => {
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+  }).catch(() => {});
 }

@@ -249,3 +249,18 @@ dialog input[type="time"] { font-size: 16px; padding: 10px 6px; }
 #drink-duration { margin: 6px 0 0; }
 #start-hint { margin: -4px 0 0; }
 dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
+
+/* Standard-Getränke als Kacheln */
+.presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.preset {
+  background: var(--surface-2); border: 1px solid transparent; border-radius: 14px;
+  padding: 10px 6px 8px; display: grid; justify-items: center; gap: 2px; min-height: 84px;
+  transition: transform .08s ease, border-color .15s;
+}
+.preset:active { transform: scale(.96); border-color: var(--accent); }
+.preset .emoji { font-size: 26px; line-height: 1.1; }
+.preset .name { font-size: 13px; font-weight: 600; }
+.preset .meta { font-size: 11px; color: var(--muted); }
+.presets + .sub { margin: 8px 0 14px; text-align: center; }
+.version { color: var(--muted); font-size: 11px; text-align: center; margin: 0; opacity: .7; }
+@media (max-width: 340px) { .presets { grid-template-columns: repeat(2, 1fr); } }
