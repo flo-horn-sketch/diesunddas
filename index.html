@@ -36,6 +36,11 @@
       </dl>
     </section>
 
+    <section class="card running" id="running-card" hidden>
+      <h2>Läuft gerade</h2>
+      <ul class="running-list" id="running-list"></ul>
+    </section>
+
     <section class="card chart-card" id="chart-card" hidden>
       <svg id="chart" viewBox="0 0 340 170" preserveAspectRatio="none" role="img" aria-label="Promilleverlauf"></svg>
     </section>
@@ -48,7 +53,19 @@
           <button role="radio" data-stomach="full" aria-checked="false">gegessen</button>
         </div>
       </div>
-      <div class="presets" id="presets"></div>
+
+      <div class="search">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="m20 20-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input id="search" type="search" placeholder="Getränk suchen …" autocomplete="off" enterkeyhint="search">
+        <button id="search-clear" class="clear-btn" aria-label="Suche leeren" hidden>×</button>
+      </div>
+      <div class="cats" id="cats"></div>
+
+      <div id="recent-wrap">
+        <p class="sub">Schnellstart · antippen startet die Stoppuhr</p>
+        <div class="chips" id="recent"></div>
+      </div>
+      <ul class="results" id="results" hidden></ul>
     </section>
 
     <section class="card">
@@ -58,6 +75,7 @@
       </div>
       <ul class="drinks" id="drink-list"></ul>
       <p class="empty" id="drink-empty">Noch nichts eingetragen.</p>
+      <p class="sub" id="drink-edit-hint" hidden>Antippen zum Ändern von Zeit, Menge oder Prozent.</p>
     </section>
 
     <p class="disclaimer">
@@ -96,23 +114,36 @@
   <!-- Getränk -->
   <dialog id="dlg-drink">
     <form method="dialog" id="form-drink">
-      <h2 id="drink-title">Eigenes Getränk</h2>
-      <label class="full">Name<input name="name" type="text" maxlength="30" placeholder="z. B. Gin Tonic" required></label>
+      <h2 id="drink-title">Getränk</h2>
+      <label class="full">Name<input name="name" type="text" maxlength="40" placeholder="z. B. Gin Tonic" required></label>
       <div class="grid2">
         <label>Menge<input name="volumeMl" type="number" inputmode="numeric" min="10" max="3000" required><span>ml</span></label>
-        <label>Alkohol<input name="abv" type="number" inputmode="decimal" min="0.5" max="80" step="0.1" required><span>%</span></label>
+        <label>Alkohol<input name="abv" type="number" inputmode="decimal" min="0" max="96" step="0.1" required><span>%</span></label>
       </div>
-      <div class="grid2">
-        <label>Getrunken von<input name="start" type="time" required></label>
-        <label>bis<input name="end" type="time" required></label>
+      <div class="chips small" id="size-chips"></div>
+      <p class="hint" id="drink-note" hidden></p>
+
+      <div class="segmented wide" role="radiogroup" aria-label="Wann" id="mode-switch">
+        <button type="button" role="radio" data-mode="start" aria-checked="true">⏱ Jetzt starten</button>
+        <button type="button" role="radio" data-mode="past" aria-checked="false">Schon getrunken</button>
       </div>
-      <p class="hint" id="drink-duration"></p>
+
+      <div id="time-fields">
+        <div class="grid2">
+          <label id="start-label">Getrunken von<input name="start" type="time"></label>
+          <label id="end-label">bis<input name="end" type="time"></label>
+        </div>
+        <p class="hint" id="drink-duration"></p>
+      </div>
+      <p class="hint" id="start-hint">Die Stoppuhr läuft, bis du auf „Fertig“ tippst.</p>
+
       <label class="check"><input type="checkbox" name="fullStomach"> mit vollem Magen getrunken</label>
       <div class="actions">
         <button type="button" class="text-btn danger" id="drink-delete" hidden>Löschen</button>
         <span class="spacer"></span>
         <button type="button" class="text-btn" id="drink-cancel">Abbrechen</button>
-        <button type="submit" class="primary">Speichern</button>
+        <button type="button" class="secondary" id="drink-finish" hidden>Jetzt fertig</button>
+        <button type="submit" class="primary" id="drink-submit">Starten</button>
       </div>
     </form>
   </dialog>

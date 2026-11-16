@@ -3,6 +3,9 @@
 Eine kleine Handy-App (Progressive Web App), die deinen **geschätzten Blutalkohol** verfolgt.
 Du trägst ein, was du trinkst, und Pegel zeigt dir:
 
+- eine Getränke-Datenbank mit über 200 Einträgen (Biere, Weine, Cocktails, Longdrinks, Schnäpse, Liköre, Cider) zum Durchsuchen
+- eine Stoppuhr: Getränk starten, „Fertig“ tippen, die Trinkdauer wird automatisch erfasst
+- nachträgliches Eintragen und Ändern (von–bis, Menge, Prozent)
 - den aktuellen Promillewert (aktualisiert sich alle 30 Sekunden)
 - wann du voraussichtlich unter 0,5 ‰ bist und wann du rechnerisch nüchtern bist (mit Spanne)
 - den Höchstwert und den Verlauf als Kurve inklusive Prognose
@@ -54,16 +57,16 @@ Die Rechenlogik steckt komplett in `js/bac.js`, die Oberfläche in `js/app.js`.
 index.html            Oberfläche
 css/style.css         Design (hell/dunkel automatisch)
 js/bac.js             Rechenmodell (ohne DOM, testbar)
+js/drinks.js          Getränke-Datenbank und Suche
 js/app.js             UI, Speicherung, Diagramm
 sw.js                 Service Worker (Offline)
 manifest.webmanifest  App-Manifest (Name, Icons)
 icons/                App-Icons
-test/bac.test.js      Tests (node --test)
+test/*.test.js        Tests (node --test)
 ```
 
 ## Ideen für später
 
 - Verlauf vergangener Abende / Statistik
 - Erinnerung „Wasser trinken“ oder Push, wenn 0,0 ‰ erreicht
-- Eigene Getränke als Favoriten speichern
 - Native App (z. B. mit Capacitor) für App Store / Play Store
