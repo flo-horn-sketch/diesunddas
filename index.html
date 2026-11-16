@@ -56,6 +56,10 @@
           </svg>
         </div>
       </div>
+      <button type="button" class="quip" id="quip" aria-label="Neuer Spruch von Pegelbert">
+        <span id="quip-text"></span>
+        <small>Pegelbert</small>
+      </button>
       <div class="gauge" aria-hidden="true">
         <div class="gauge-track"></div>
         <div class="gauge-fill" id="gauge-fill"></div>
@@ -105,6 +109,11 @@
         </div>
       </div>
       <div class="presets" id="presets"></div>
+      <button type="button" class="water-btn" id="btn-water">
+        <span class="water-ico" id="water-ico"></span>
+        <span class="water-txt"><b>Glas Wasser</b><small id="water-count">Pegelbert freut sich</small></span>
+        <span class="water-plus">+1</span>
+      </button>
       <p class="sub" id="add-hint"></p>
 
       <div class="search">
@@ -144,10 +153,33 @@
       <p class="fun" id="fun-fact" hidden></p>
     </section>
 
+    <section class="card kater" id="kater-card" hidden>
+      <span class="kater-ico" id="kater-ico"></span>
+      <div>
+        <h2>Kater-Wetterbericht für morgen</h2>
+        <strong id="kater-title"></strong>
+        <p id="kater-text"></p>
+        <small>Nicht ganz ernst gemeint.</small>
+      </div>
+    </section>
+
+    <section class="card lall" id="lall-card" hidden>
+      <div class="row-between">
+        <h2>Lall-Test · sag das dreimal schnell</h2>
+        <button type="button" class="text-btn" id="lall-next">Nächster</button>
+      </div>
+      <p class="twister" id="twister"></p>
+      <p class="sub">Klappt nicht mehr? Dann lieber ein Wasser.</p>
+    </section>
+
     <section class="card">
       <div class="row-between">
         <h2>Getrunken</h2>
         <button id="btn-clear" class="text-btn" hidden>Alle löschen</button>
+      </div>
+      <div class="deckel" id="deckel" hidden>
+        <div class="tally" id="tally" aria-hidden="true"></div>
+        <span id="deckel-text"></span>
       </div>
       <ul class="drinks" id="drink-list"></ul>
       <p class="empty" id="drink-empty">Noch nichts eingetragen.</p>

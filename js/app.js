@@ -1,12 +1,14 @@
 import { summarize, classify, alcoholGrams, isValidProfile } from './bac.js';
 import { CATEGORIES, searchDrinks, sizesFor, iconFor, estMinFor } from './drinks.js';
 import { icon } from './icons.js';
+import {
+  QUIPS, WATER_QUIPS, THIRSTY_QUIPS, CHEERS, SHOT_CHEERS, TWISTERS,
+  pick, katerForecast, tempoVerdict, runningComment, drinksSinceWater,
+} from './fun.js';
 
-export const APP_VERSION = 7;
+export const APP_VERSION = 8;
 
-const CHEERS = ['Prost!', 'Zum Wohl!', 'Wohl bekomm’s!', 'Hoch die Tassen!', 'Stößchen!', 'Na dann, Prost!', 'Auf dich!'];
-const SHOT_CHEERS = ['Zack, weg!', 'Kopf in den Nacken!', 'Runter damit!', 'Und hopp!'];
-const pickOne = (list) => list[Math.floor(Math.random() * list.length)];
+const pickOne = (list) => pick(list);
 
 const SEC = 1000;
 const MIN = 60 * SEC;
@@ -51,6 +53,9 @@ const state = {
   drinks: store.get('pegel.drinks', []).filter((d) => d.time > Date.now() - KEEP_DRINKS_MS),
   fullStomach: store.get('pegel.fullStomach', false),
   presetSizes: store.get('pegel.presetSizes', {}),
+  water: store.get('pegel.water', []).filter((t) => t > Date.now() - KEEP_DRINKS_MS),
+  quip: { level: null, text: '' },
+  twister: pick(TWISTERS),
   addMode: 'start', // 'start' = Stoppuhr, 'past' = nachtragen
   query: '',
   cat: null,
@@ -58,7 +63,7 @@ const state = {
   undo: null,
 };
 
-const saveDrinks = () => store.set('pegel.drinks', state.drinks);
+const saveDrinks = () => { store.set('pegel.drinks', state.drinks); store.set('pegel.water', state.water); };
 const newId = () => crypto.randomUUID?.() ?? String(Date.now() + Math.random());
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
@@ -133,12 +138,13 @@ function normalizeRunning() {
 
 /** Änderung an den Getränken mit „Rückgängig“ */
 function commit(message, mutate) {
-  const snapshot = clone(state.drinks);
+  const snapshot = clone({ drinks: state.drinks, water: state.water });
   mutate();
   saveDrinks();
   render();
   showToast(message, () => {
-    state.drinks = snapshot;
+    state.drinks = snapshot.drinks;
+    state.water = snapshot.water;
     saveDrinks();
     render();
   });
@@ -200,7 +206,8 @@ function finishDrink(id) {
   if (!d?.running) return;
   const now = Date.now();
   const mins = Math.round((now - d.time) / MIN);
-  commit(`${d.name} ausgetrunken · ${fmtDuration(mins)}`, () => stopNow(state.drinks.find((x) => x.id === id), now));
+  const verdict = tempoVerdict(mins, d.estMin);
+  commit(`${d.name} ausgetrunken · ${fmtDuration(mins)}${verdict ? ` · ${verdict}` : ''}`, () => stopNow(state.drinks.find((x) => x.id === id), now));
 }
 
 function setRunningSize(ml) {
@@ -245,6 +252,7 @@ function render() {
   $('fact-grams').textContent = `${fmtNum(s.totalGrams, 0)} g`;
   renderMascot(cls.level, s.current);
   renderFunFact(s.totalGrams);
+  renderFun(cls.level, s);
 
   renderChart(s, drinks, now);
   renderRunning(now);
@@ -294,6 +302,104 @@ function renderFunFact(grams) {
     + `also etwa <b>${fmtNum(doener, 1)} Döner</b>.`;
 }
 
+// ---------- Spaß: Pegelbert, Wasser, Kater-Wetter, Bierdeckel, Lall-Test ----------
+const alcoholic = () => state.drinks.filter((d) => d.abv > 0);
+
+function sayQuip(text, level = state.quip.level) {
+  state.quip = { level, text };
+  const el = $('quip');
+  $('quip-text').textContent = text;
+  el.classList.remove('fresh');
+  void el.offsetWidth;
+  el.classList.add('fresh');
+}
+
+function newQuip(level) {
+  const thirsty = level >= 1 && level <= 5 && drinksSinceWater(state.drinks, state.water) >= 3;
+  const list = thirsty && Math.random() < 0.6 ? THIRSTY_QUIPS : (QUIPS[level] ?? QUIPS[0]);
+  sayQuip(pick(list, state.quip.text), level);
+}
+
+function pokeMascot() {
+  const level = Number($('mascot').dataset.level);
+  newQuip(level);
+  if (level >= 6) return; // ab hier kein Klamauk mehr
+  const m = $('mascot');
+  m.classList.remove('jiggle');
+  void m.offsetWidth;
+  m.classList.add('jiggle');
+}
+$('quip').addEventListener('click', pokeMascot);
+$('mascot').addEventListener('click', pokeMascot);
+$('mascot').addEventListener('animationend', (e) => { if (e.animationName === 'jiggle') $('mascot').classList.remove('jiggle'); });
+
+function tallyGroup(n, cls = '') {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 30 26');
+  svg.setAttribute('width', 30);
+  svg.setAttribute('height', 26);
+  if (cls) svg.classList.add(cls);
+  let d = '';
+  for (let i = 0; i < Math.min(n, 4); i++) d += `M${5 + i * 6.5} 3.5l${i % 2 ? 0.8 : -0.6} 19`;
+  if (n >= 5) d += 'M1.500 20L28 6';
+  const path = document.createElementNS(SVG_NS, 'path');
+  path.setAttribute('d', d);
+  svg.append(path);
+  return svg;
+}
+
+function tally(count, cls) {
+  const groups = [];
+  for (let left = count; left > 0; left -= 5) groups.push(tallyGroup(Math.min(5, left), cls));
+  return groups;
+}
+
+function renderFun(level, s) {
+  const drinks = alcoholic();
+  const hasDrinks = drinks.length > 0;
+  if (state.quip.level !== level) newQuip(level);
+
+  const waterToday = state.water.length;
+  $('water-count').textContent = waterToday
+    ? `${waterToday} ${waterToday === 1 ? 'Glas' : 'Gläser'} heute · weiter so`
+    : 'Pegelbert freut sich';
+
+  // Kater-Wetterbericht
+  $('kater-card').hidden = !hasDrinks;
+  if (hasDrinks) {
+    const f = katerForecast(s.peak?.bac ?? 0, drinks.length, waterToday);
+    $('kater-ico').replaceChildren(icon(f.icon, 32));
+    $('kater-title').textContent = f.title;
+    $('kater-text').textContent = f.milder ? `${f.text} Dank Wasser eine Stufe milder.` : f.text;
+  }
+
+  // Lall-Test
+  $('lall-card').hidden = !hasDrinks;
+  $('twister').textContent = state.twister;
+
+  // Bierdeckel
+  $('deckel').hidden = !hasDrinks && !waterToday;
+  $('tally').replaceChildren(...tally(drinks.length), ...tally(waterToday, 'w'));
+  const parts = [];
+  if (drinks.length) parts.push(`${drinks.length} ${drinks.length === 1 ? 'Getränk' : 'Getränke'}`);
+  if (waterToday) parts.push(`${waterToday} Wasser`);
+  $('deckel-text').textContent = `Dein Deckel: ${parts.join(' · ')}`;
+}
+
+$('lall-next').addEventListener('click', () => {
+  state.twister = pick(TWISTERS, state.twister);
+  $('twister').textContent = state.twister;
+});
+
+$('btn-water').addEventListener('click', () => {
+  commit('Wasser getrunken. Sehr vernünftig!', () => state.water.push(Date.now()));
+  sayQuip(pick(WATER_QUIPS, state.quip.text));
+  const b = $('btn-water');
+  b.classList.remove('splash');
+  void b.offsetWidth;
+  b.classList.add('splash');
+});
+
 function sizeChips(container, sizes, current, onPick) {
   container.replaceChildren(...sizes.map((ml) => {
     const b = document.createElement('button');
@@ -314,8 +420,7 @@ function renderRunning(now) {
   if (!d) return;
   $('run-icon').replaceChildren(icon(iconOf(d), 26));
   $('run-name').textContent = d.name;
-  const long = now - d.time > 2 * HOUR;
-  $('run-meta').textContent = `seit ${fmtTime(d.time)} · ${fmtNum(d.abv)} %${long ? ' · nuckelst du noch?' : ''}`;
+  $('run-meta').textContent = `seit ${fmtTime(d.time)} · ${runningComment((now - d.time) / MIN, d.estMin)}`;
   $('run-timer').dataset.start = d.time;
   $('run-timer').textContent = fmtStopwatch(now - d.time);
   const sizes = [...new Set([...(d.sizes ?? []), d.volumeMl])].sort((a, b) => a - b);
@@ -350,7 +455,7 @@ function renderDrinks(now) {
   $('drink-empty').hidden = drinks.length > 0;
   $('drink-empty').textContent = state.drinks.length ? 'Noch kein Getränk fertig.' : 'Noch nichts eingetragen.';
   $('drink-edit-hint').hidden = drinks.length === 0;
-  $('btn-clear').hidden = state.drinks.length === 0;
+  $('btn-clear').hidden = state.drinks.length === 0 && state.water.length === 0;
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -769,7 +874,7 @@ document.querySelectorAll('[data-stomach]').forEach((b) => b.addEventListener('c
 
 $('btn-clear').addEventListener('click', () => {
   if (!confirm('Alle eingetragenen Getränke löschen?')) return;
-  commit('Alle Getränke gelöscht', () => { state.drinks = []; });
+  commit('Alles gelöscht. Der Deckel ist bezahlt.', () => { state.drinks = []; state.water = []; });
 });
 
 document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
@@ -782,6 +887,7 @@ renderAddMode();
 renderCats();
 renderAdd();
 renderStomach();
+$('water-ico').replaceChildren(icon('wasser', 26));
 render();
 if (!isValidProfile(state.profile)) openProfileDialog();
 

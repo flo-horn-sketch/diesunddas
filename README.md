@@ -8,6 +8,7 @@ Du trägst ein, was du trinkst, und Pegel zeigt dir:
 - Menge des laufenden Getränks direkt in der Stoppuhr-Karte ändern
 - nachträgliches Eintragen („Nachtragen“) und Ändern (von–bis, Menge, Prozent)
 - ein Bierglas-Maskottchen, das sich mit dem Pegel füllt, schwankt und das Gesicht verzieht, dazu Stufen wie „Leicht angeschwipst“ oder „Sternhagelvoll“
+- Pegelbert spricht (Sprüche je Stufe, antippen für einen neuen), Kater-Wetterbericht, Bierdeckel mit Strichliste, Wasser-Knopf, Trinktempo-Urteil und Lall-Test mit Zungenbrechern
 - den aktuellen Promillewert (aktualisiert sich alle 30 Sekunden)
 - wann du voraussichtlich unter 0,5 ‰ bist und wann du rechnerisch nüchtern bist (mit Spanne)
 - den Höchstwert und den Verlauf als Kurve inklusive Prognose
@@ -61,6 +62,7 @@ css/style.css         Design (dunkel, Bernstein-Akzent)
 js/bac.js             Rechenmodell (ohne DOM, testbar)
 js/drinks.js          Getränke-Datenbank und Suche
 js/icons.js           Strich-Icons
+js/fun.js             Sprüche, Kater-Wetterbericht, Trinktempo, Zungenbrecher
 fonts/                Inter und Space Grotesk (SIL Open Font License)
 js/app.js             UI, Speicherung, Diagramm
 sw.js                 Service Worker (Offline)
