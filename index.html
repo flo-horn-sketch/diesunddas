@@ -31,8 +31,30 @@
   <main>
     <section class="card hero" id="hero" data-level="0">
       <div class="hero-top">
-        <div class="bac"><span id="bac-value">0,00</span><span class="unit">‰</span></div>
-        <div class="hero-status"><strong id="status-label">Nüchtern</strong><span>geschätzt</span></div>
+        <div class="hero-main">
+          <div class="bac"><span id="bac-value">0,00</span><span class="unit">‰</span></div>
+          <div class="hero-status"><strong id="status-label">Stocknüchtern</strong><span>geschätzt</span></div>
+        </div>
+        <div class="mascot-wrap" aria-hidden="true">
+          <span class="hicks" id="hicks">Hicks!</span>
+          <svg id="mascot" class="mascot" data-level="0" viewBox="0 0 100 120" width="88" height="106">
+            <defs><clipPath id="glass-clip"><path d="M20 22H72L67 104a7 7 0 0 1-7 6H32a7 7 0 0 1-7-6z"/></clipPath></defs>
+            <path class="m-handle" d="M71 42h9a9 9 0 0 1 9 9v14a9 9 0 0 1-9 9h-8"/>
+            <path class="m-glass" d="M20 22H72L67 104a7 7 0 0 1-7 6H32a7 7 0 0 1-7-6z"/>
+            <g clip-path="url(#glass-clip)">
+              <rect id="m-beer" class="m-beer" x="10" y="0" width="80" height="130"/>
+              <g class="m-bubbles"><circle cx="33" cy="106" r="2"/><circle cx="47" cy="106" r="1.600"/><circle cx="58" cy="106" r="2.200"/></g>
+              <g id="m-foam" class="m-foam"><circle cx="22" cy="0" r="7"/><circle cx="33" cy="-1" r="8"/><circle cx="46" cy="0" r="8"/><circle cx="59" cy="-1" r="8"/><circle cx="70" cy="0" r="7"/></g>
+            </g>
+            <path class="m-glass-line" d="M20 22H72L67 104a7 7 0 0 1-7 6H32a7 7 0 0 1-7-6z"/>
+            <circle class="m-cheek" cx="27" cy="72" r="4.500"/><circle class="m-cheek" cx="66" cy="72" r="4.500"/>
+            <circle class="m-eye" cx="37" cy="60" r="7"/><circle class="m-eye" cx="56" cy="60" r="7"/>
+            <circle id="m-pl" class="m-pupil" cx="37" cy="60" r="3"/><circle id="m-pr" class="m-pupil" cx="56" cy="60" r="3"/>
+            <path id="m-x" class="m-x" d="M33.500 56.500l7 7m0-7l-7 7M52.500 56.500l7 7m0-7l-7 7"/>
+            <path id="m-mouth" class="m-mouth" d="M40 76q6.500 5 13 0q-6.500 2-13 0z"/>
+            <path id="m-tongue" class="m-tongue" d="M43 81q3.500-3 7 0v4a3.500 3.500 0 0 1-7 0z"/>
+          </svg>
+        </div>
       </div>
       <div class="gauge" aria-hidden="true">
         <div class="gauge-track"></div>
@@ -69,8 +91,8 @@
       </div>
       <div class="run-idle" id="run-idle">
         <svg class="ico" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path d="M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM12 9v4l2.5 1.500M9.500 2.500h5"/></svg>
-        <strong>Kein Getränk läuft</strong>
-        <span>Tippe unten auf ein Getränk. Die Stoppuhr startet sofort.</span>
+        <strong>Trockenzeit</strong>
+        <span>Das Glas ist leer. Tippe unten auf ein Getränk, die Stoppuhr startet sofort.</span>
       </div>
     </section>
 
@@ -119,6 +141,7 @@
         <div><dt>Nüchtern</dt><dd id="fact-sober">–</dd></div>
         <div><dt>Alkohol gesamt</dt><dd id="fact-grams">0 g</dd></div>
       </dl>
+      <p class="fun" id="fun-fact" hidden></p>
     </section>
 
     <section class="card">

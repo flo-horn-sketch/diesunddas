@@ -171,11 +171,11 @@ export function summarize(drinks, profile, now) {
 
 /** Einordnung eines Promillewerts (Rechtslage Deutschland, Stand 2026) */
 export function classify(bac) {
-  if (bac < 0.01) return { level: 0, label: 'Rechnerisch nüchtern', note: 'Restalkohol ist trotzdem möglich.' };
-  if (bac < 0.3) return { level: 1, label: 'Leicht erhöht', note: 'Für Fahranfänger und unter 21 gilt 0,0 ‰.' };
-  if (bac < 0.5) return { level: 2, label: 'Achtung', note: 'Ab 0,3 ‰ mit Ausfallerscheinungen ist Fahren strafbar.' };
-  if (bac < 1.1) return { level: 3, label: 'Über 0,5 ‰', note: 'Fahren ist eine Ordnungswidrigkeit (Bußgeld, Fahrverbot).' };
-  if (bac < 1.6) return { level: 4, label: 'Absolut fahruntüchtig', note: 'Ab 1,1 ‰ ist Fahren eine Straftat.' };
-  if (bac < 2.5) return { level: 5, label: 'Sehr hoch', note: 'Trink Wasser, mach eine Pause und lass dich begleiten.' };
+  if (bac < 0.01) return { level: 0, label: 'Stocknüchtern', note: 'Rechnerisch nüchtern. Restalkohol ist trotzdem möglich.' };
+  if (bac < 0.3) return { level: 1, label: 'Leicht angeschwipst', note: 'Für Fahranfänger und unter 21 gilt 0,0 ‰.' };
+  if (bac < 0.5) return { level: 2, label: 'Gut angeheitert', note: 'Ab 0,3 ‰ mit Ausfallerscheinungen ist Fahren strafbar.' };
+  if (bac < 1.1) return { level: 3, label: 'Ordentlich einen sitzen', note: 'Über 0,5 ‰: Fahren ist eine Ordnungswidrigkeit (Bußgeld, Fahrverbot).' };
+  if (bac < 1.6) return { level: 4, label: 'Sternhagelvoll', note: 'Absolut fahruntüchtig: Ab 1,1 ‰ ist Fahren eine Straftat.' };
+  if (bac < 2.5) return { level: 5, label: 'Jetzt reicht’s aber', note: 'Trink Wasser, mach eine Pause und lass dich begleiten.' };
   return { level: 6, label: 'Gefährlich hoch', note: 'Alkoholvergiftung möglich. Nicht allein bleiben, im Notfall 112 rufen.' };
 }

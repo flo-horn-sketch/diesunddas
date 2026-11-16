@@ -2,7 +2,11 @@ import { summarize, classify, alcoholGrams, isValidProfile } from './bac.js';
 import { CATEGORIES, searchDrinks, sizesFor, iconFor, estMinFor } from './drinks.js';
 import { icon } from './icons.js';
 
-export const APP_VERSION = 6;
+export const APP_VERSION = 7;
+
+const CHEERS = ['Prost!', 'Zum Wohl!', 'Wohl bekomm’s!', 'Hoch die Tassen!', 'Stößchen!', 'Na dann, Prost!', 'Auf dich!'];
+const SHOT_CHEERS = ['Zack, weg!', 'Kopf in den Nacken!', 'Runter damit!', 'Und hopp!'];
+const pickOne = (list) => list[Math.floor(Math.random() * list.length)];
 
 const SEC = 1000;
 const MIN = 60 * SEC;
@@ -174,15 +178,21 @@ function startDrink(base) {
   if (d.estMin > 0) {
     d.running = true;
     d.durationMin = null;
-    message = prev ? `${d.name} gestartet · ${prev.name} gestoppt` : `${d.name} gestartet`;
+    message = prev ? `${pickOne(CHEERS)} ${d.name} läuft · ${prev.name} gestoppt` : `${pickOne(CHEERS)} ${d.name} läuft`;
   } else {
     d.durationMin = 0;
-    message = `${d.name} eingetragen`;
+    message = `${pickOne(SHOT_CHEERS)} ${d.name} eingetragen`;
   }
   commit(message, () => {
     if (prev) stopNow(state.drinks.find((x) => x.id === prev.id), now);
     state.drinks.push(d);
   });
+  if (d.running) {
+    const card = $('run-active');
+    card.classList.remove('pop');
+    void card.offsetWidth; // Animation neu anstoßen
+    card.classList.add('pop');
+  }
 }
 
 function finishDrink(id) {
@@ -190,7 +200,7 @@ function finishDrink(id) {
   if (!d?.running) return;
   const now = Date.now();
   const mins = Math.round((now - d.time) / MIN);
-  commit(`${d.name} gestoppt · ${fmtDuration(mins)}`, () => stopNow(state.drinks.find((x) => x.id === id), now));
+  commit(`${d.name} ausgetrunken · ${fmtDuration(mins)}`, () => stopNow(state.drinks.find((x) => x.id === id), now));
 }
 
 function setRunningSize(ml) {
@@ -218,7 +228,7 @@ function render() {
   $('status-note').hidden = !hasDrinks;
   $('gauge-fill').style.width = `${Math.max(2, Math.min(100, (s.current / 1.6) * 100)).toFixed(1)}%`;
 
-  const below05 = !hasDrinks ? '–' : s.below05 ? fmtTime(s.below05) : 'jetzt';
+  const below05 = !hasDrinks ? '–' : s.below05 ? `${fmtDayPrefix(s.below05, now)}${fmtTime(s.below05)}` : 'jetzt';
   const sober = !hasDrinks ? '–' : s.soberAt ? `${fmtDayPrefix(s.soberAt, now)}${fmtTime(s.soberAt)}` : 'jetzt';
   $('hero-05').textContent = below05;
   $('hero-sober').textContent = sober;
@@ -233,11 +243,55 @@ function render() {
       : 'jetzt';
   }
   $('fact-grams').textContent = `${fmtNum(s.totalGrams, 0)} g`;
+  renderMascot(cls.level, s.current);
+  renderFunFact(s.totalGrams);
 
   renderChart(s, drinks, now);
   renderRunning(now);
   renderDrinks(now);
   renderPresets();
+}
+
+// Gesicht des Maskottchens je Stufe: Mund-Pfad, Pupillen (links/rechts)
+const FACES = [
+  { mouth: 'M40 76q6.5 5 13 0q-6.5 2-13 0z', pl: [37, 60], pr: [56, 60] },
+  { mouth: 'M38 74h17q-1 10-8.5 10T38 74z', pl: [37, 59], pr: [56, 59] },
+  { mouth: 'M37 74h19q-1 11-9.5 11T37 74z', pl: [38.5, 60], pr: [54.5, 60] },
+  { mouth: 'M36 73h21q-1 13-10.5 13T36 73z', pl: [40.5, 58.5], pr: [52.5, 62] },
+  { mouth: 'M36 79q3.5-6 7 0t7 0 7 0', line: true },
+  { mouth: 'M36 79q3.5-6 7 0t7 0 7 0', line: true },
+  { mouth: 'M39 82q7.5-7 15 0', line: true },
+];
+
+function renderMascot(level, bac) {
+  const m = $('mascot');
+  const face = FACES[level] ?? FACES[0];
+  m.dataset.level = level;
+  // Füllhöhe: leer bei 0, voll ab 1,6 ‰
+  const h = bac < 0.005 ? 0 : 12 + Math.min(1, bac / 1.6) * 72;
+  const top = 112 - h;
+  $('m-beer').style.transform = `translateY(${top}px)`;
+  $('m-foam').style.transform = `translateY(${h ? top : 130}px)`;
+  m.style.setProperty('--h', Math.max(10, h - 10));
+  const mouth = $('m-mouth');
+  mouth.setAttribute('d', face.mouth);
+  mouth.classList.toggle('line', !!face.line);
+  if (face.pl) {
+    $('m-pl').setAttribute('cx', face.pl[0]); $('m-pl').setAttribute('cy', face.pl[1]);
+    $('m-pr').setAttribute('cx', face.pr[0]); $('m-pr').setAttribute('cy', face.pr[1]);
+  }
+  $('hicks').classList.toggle('on', level >= 2 && level <= 5);
+}
+
+function renderFunFact(grams) {
+  const el = $('fun-fact');
+  el.hidden = grams < 1;
+  if (grams < 1) return;
+  const beers = grams / alcoholGrams(500, 5);
+  const kcal = grams * 7;
+  const doener = kcal / 600;
+  el.innerHTML = `Das sind so viel Alkohol wie in <b>${fmtNum(beers, 1)} Bier</b> (0,5 l) und rund <b>${fmtNum(kcal, 0)} kcal</b>, `
+    + `also etwa <b>${fmtNum(doener, 1)} Döner</b>.`;
 }
 
 function sizeChips(container, sizes, current, onPick) {
@@ -261,7 +315,7 @@ function renderRunning(now) {
   $('run-icon').replaceChildren(icon(iconOf(d), 26));
   $('run-name').textContent = d.name;
   const long = now - d.time > 2 * HOUR;
-  $('run-meta').textContent = `seit ${fmtTime(d.time)} · ${fmtNum(d.abv)} %${long ? ' · noch dran?' : ''}`;
+  $('run-meta').textContent = `seit ${fmtTime(d.time)} · ${fmtNum(d.abv)} %${long ? ' · nuckelst du noch?' : ''}`;
   $('run-timer').dataset.start = d.time;
   $('run-timer').textContent = fmtStopwatch(now - d.time);
   const sizes = [...new Set([...(d.sizes ?? []), d.volumeMl])].sort((a, b) => a - b);

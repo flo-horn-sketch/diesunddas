@@ -7,6 +7,7 @@ Du trägst ein, was du trinkst, und Pegel zeigt dir:
 - eine Stoppuhr: Getränk antippen startet sie sofort, „Stopp“ beendet sie; ein neues Getränk stoppt das laufende automatisch (Shots werden direkt eingetragen)
 - Menge des laufenden Getränks direkt in der Stoppuhr-Karte ändern
 - nachträgliches Eintragen („Nachtragen“) und Ändern (von–bis, Menge, Prozent)
+- ein Bierglas-Maskottchen, das sich mit dem Pegel füllt, schwankt und das Gesicht verzieht, dazu Stufen wie „Leicht angeschwipst“ oder „Sternhagelvoll“
 - den aktuellen Promillewert (aktualisiert sich alle 30 Sekunden)
 - wann du voraussichtlich unter 0,5 ‰ bist und wann du rechnerisch nüchtern bist (mit Spanne)
 - den Höchstwert und den Verlauf als Kurve inklusive Prognose
