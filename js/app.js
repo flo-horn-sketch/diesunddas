@@ -1,7 +1,7 @@
 import { summarize, classify, alcoholGrams, isValidProfile } from './bac.js';
 import { CATEGORIES, searchDrinks, sizesFor, emojiFor, estMinFor } from './drinks.js';
 
-export const APP_VERSION = 4;
+export const APP_VERSION = 5;
 
 const SEC = 1000;
 const MIN = 60 * SEC;
@@ -10,17 +10,28 @@ const KEEP_DRINKS_MS = 36 * HOUR;
 const MAX_DURATION_MIN = 6 * 60;
 
 // Standard-Getränke als Kacheln; alles andere über die Suche
+// estMin = typische Trinkdauer für die Standardmenge (wird mit der Menge hochgerechnet)
+const BEER_SIZES = [200, 250, 300, 330, 400, 500, 1000];
 const PRESETS = [
-  { emoji: '🍺', name: 'Bier', cat: 'bier', volumeMl: 500, abv: 5 },
-  { emoji: '🍺', name: 'Pils', cat: 'bier', volumeMl: 330, abv: 4.8, estMin: 20 },
-  { emoji: '🍻', name: 'Weizen', cat: 'bier', volumeMl: 500, abv: 5.4 },
-  { emoji: '🍋', name: 'Radler', cat: 'bier', volumeMl: 500, abv: 2.5 },
-  { emoji: '🍷', name: 'Wein', cat: 'wein', volumeMl: 200, abv: 12 },
-  { emoji: '🥂', name: 'Sekt', cat: 'sekt', volumeMl: 100, abv: 11, estMin: 15 },
-  { emoji: '🍹', name: 'Spritz', cat: 'sekt', volumeMl: 200, abv: 8, estMin: 30 },
-  { emoji: '🍸', name: 'Longdrink', cat: 'longdrink', volumeMl: 40, abv: 40 },
-  { emoji: '🥃', name: 'Shot', cat: 'schnaps', volumeMl: 20, abv: 40 },
+  { emoji: '🍺', name: 'Bier', cat: 'bier', volumeMl: 500, abv: 5, estMin: 30, sizes: BEER_SIZES },
+  { emoji: '🍺', name: 'Pils', cat: 'bier', volumeMl: 330, abv: 4.8, estMin: 20, sizes: BEER_SIZES },
+  { emoji: '🍻', name: 'Weizen', cat: 'bier', volumeMl: 500, abv: 5.4, estMin: 30, sizes: [300, 330, 500] },
+  { emoji: '🍋', name: 'Radler', cat: 'bier', volumeMl: 500, abv: 2.5, estMin: 30, sizes: [330, 500, 1000] },
+  { emoji: '🍷', name: 'Wein', cat: 'wein', volumeMl: 200, abv: 12, estMin: 30, sizes: [100, 125, 150, 200, 250, 500] },
+  { emoji: '🥂', name: 'Sekt', cat: 'sekt', volumeMl: 100, abv: 11, estMin: 15, sizes: [100, 150, 200] },
+  { emoji: '🍹', name: 'Spritz', cat: 'sekt', volumeMl: 200, abv: 8, estMin: 30, sizes: [200, 300, 400] },
+  { emoji: '🍸', name: 'Longdrink', cat: 'longdrink', volumeMl: 40, abv: 40, estMin: 30, sizes: [20, 40, 60, 80] },
+  { emoji: '🥃', name: 'Shot', cat: 'schnaps', volumeMl: 20, abv: 40, estMin: 0, sizes: [20, 40] },
 ];
+
+/** Typische Trinkdauer an die gewählte Menge anpassen (1 l Bier dauert länger als 0,33 l) */
+function scaledEstMin(base, volumeMl) {
+  const est = base?.estMin ?? estMinFor(base?.cat);
+  if (!est) return 0;
+  const ref = base?.defaultMl ?? base?.volumeMl;
+  if (!ref || !volumeMl) return est;
+  return Math.round(Math.min(120, Math.max(5, (est * volumeMl) / ref)));
+}
 
 // ---------- Speicher (nur lokal auf dem Gerät) ----------
 const store = {
@@ -36,6 +47,7 @@ const state = {
   profile: store.get('pegel.profile', null),
   drinks: store.get('pegel.drinks', []).filter((d) => d.time > Date.now() - KEEP_DRINKS_MS),
   fullStomach: store.get('pegel.fullStomach', false),
+  presetSizes: store.get('pegel.presetSizes', {}),
   query: '',
   cat: null,
   dlg: { mode: 'start', editingId: null, base: null },
@@ -49,7 +61,11 @@ const newId = () => crypto.randomUUID?.() ?? String(Date.now() + Math.random());
 const fmtBac = (v) => v.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtTime = (t) => new Date(t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 const fmtNum = (v, d = 1) => v.toLocaleString('de-DE', { maximumFractionDigits: d });
-const fmtVolume = (ml) => (ml >= 100 ? `${fmtNum(ml / 1000, 2)} l` : `${fmtNum(ml / 10)} cl`);
+const fmtVolume = (ml) => {
+  if (ml % 10 !== 0 && ml % 5 !== 0) return `${fmtNum(ml, 0)} ml`; // krumme Mengen genau
+  if (ml >= 100 && ml % 10 !== 0) return `${fmtNum(ml, 0)} ml`; // z. B. 175 ml statt 0,18 l
+  return ml >= 100 ? `${fmtNum(ml / 1000, 2)} l` : `${fmtNum(ml / 10)} cl`;
+};
 const fmtDrinkMeta = (d) => `${fmtVolume(d.volumeMl)} · ${fmtNum(d.abv)} %`;
 
 function fmtIn(t, now) {
@@ -346,7 +362,8 @@ $('search-clear').addEventListener('click', () => {
 });
 
 function renderPresets() {
-  $('presets').replaceChildren(...PRESETS.map((p) => {
+  $('presets').replaceChildren(...PRESETS.map((preset) => {
+    const p = { ...preset, defaultMl: preset.volumeMl, volumeMl: state.presetSizes[preset.name] ?? preset.volumeMl, presetKey: preset.name };
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'preset';
@@ -354,7 +371,7 @@ function renderPresets() {
     b.querySelector('.emoji').textContent = p.emoji;
     b.querySelector('.name').textContent = p.name;
     b.querySelector('.meta').textContent = fmtDrinkMeta(p);
-    b.addEventListener('click', () => ensureProfile() && startDrink(p));
+    b.addEventListener('click', () => ensureProfile() && openDrinkDialog({ base: p }));
     return b;
   }));
 }
@@ -431,9 +448,18 @@ function renderSizeChips(sizes, current) {
     b.addEventListener('click', () => {
       $('form-drink').elements.volumeMl.value = ml;
       renderSizeChips(sizes, ml);
+      updateGrams();
     });
     return b;
   }));
+}
+
+function updateGrams() {
+  const f = $('form-drink');
+  const ml = Number(f.elements.volumeMl.value), abv = Number(f.elements.abv.value);
+  $('drink-grams').textContent = ml > 0 && abv >= 0 && f.elements.abv.value !== ''
+    ? `= ${fmtNum(alcoholGrams(ml, abv), 1)} g reiner Alkohol`
+    : '';
 }
 
 function openDrinkDialog({ base = null, drink = null }) {
@@ -446,13 +472,14 @@ function openDrinkDialog({ base = null, drink = null }) {
   f.elements.abv.value = src.abv ?? '';
   f.elements.fullStomach.checked = drink?.fullStomach ?? state.fullStomach;
 
-  const sizes = src.cat && CATEGORIES[src.cat] ? sizesFor(src) : [];
+  const sizes = src.sizes ?? (src.cat && CATEGORIES[src.cat] ? sizesFor(src) : []);
   renderSizeChips(sizes, src.volumeMl);
+  updateGrams();
   const note = CATEGORIES[src.cat]?.note;
   $('drink-note').hidden = !note;
   $('drink-note').textContent = note ?? '';
 
-  const est = src.estMin ?? estMinFor(src.cat);
+  const est = scaledEstMin(src, src.volumeMl);
   if (drink) {
     f.elements.start.value = toTimeInput(drink.time);
     f.elements.end.value = toTimeInput(drink.running ? now : finishedEnd(drink));
@@ -461,7 +488,7 @@ function openDrinkDialog({ base = null, drink = null }) {
     f.elements.end.value = toTimeInput(now);
   }
 
-  $('drink-title').textContent = drink ? 'Getränk bearbeiten' : `${emojiFor(src.cat)} Getränk hinzufügen`;
+  $('drink-title').textContent = drink ? 'Getränk bearbeiten' : `${src.emoji ?? emojiFor(src.cat)} ${src.presetKey ? `${src.name}: Menge wählen` : 'Getränk hinzufügen'}`;
   $('mode-switch').hidden = !!drink;
   $('drink-delete').hidden = !drink;
   $('drink-finish').hidden = !drink?.running;
@@ -475,7 +502,9 @@ $('form-drink').elements.end.addEventListener('input', updateDurationHint);
 $('form-drink').elements.volumeMl.addEventListener('input', (e) => {
   const ml = Number(e.target.value);
   document.querySelectorAll('#size-chips .chip').forEach((c) => c.setAttribute('aria-pressed', String(c.dataset.ml === String(ml))));
+  updateGrams();
 });
+$('form-drink').elements.abv.addEventListener('input', updateGrams);
 
 $('form-drink').addEventListener('submit', () => {
   const f = $('form-drink');
@@ -498,10 +527,17 @@ $('form-drink').addEventListener('submit', () => {
   }
 
   const cat = base?.cat ?? 'custom';
+  const estMin = scaledEstMin(base, data.volumeMl);
+  const extra = base?.emoji ? { emoji: base.emoji } : {};
+  if (base?.presetKey) {
+    state.presetSizes = { ...state.presetSizes, [base.presetKey]: data.volumeMl };
+    store.set('pegel.presetSizes', state.presetSizes);
+    renderPresets();
+  }
   if (mode === 'start') {
-    startDrink({ ...data, cat, estMin: base?.estMin });
+    startDrink({ ...data, ...extra, cat, estMin });
   } else {
-    addDrink({ id: newId(), cat, ...data, ...readSpan(), estMin: estMinFor(cat) }, `${data.name} eingetragen`);
+    addDrink({ id: newId(), cat, ...extra, ...data, ...readSpan(), estMin }, `${data.name} eingetragen`);
   }
   state.query = '';
   $('search').value = '';

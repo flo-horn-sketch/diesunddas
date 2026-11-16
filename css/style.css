@@ -264,3 +264,4 @@ dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
 .presets + .sub { margin: 8px 0 14px; text-align: center; }
 .version { color: var(--muted); font-size: 11px; text-align: center; margin: 0; opacity: .7; }
 @media (max-width: 340px) { .presets { grid-template-columns: repeat(2, 1fr); } }
+#drink-grams { margin: -6px 0 0; font-variant-numeric: tabular-nums; }
