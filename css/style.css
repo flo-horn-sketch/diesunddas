@@ -441,3 +441,24 @@ dialog input::-webkit-outer-spin-button, dialog input::-webkit-inner-spin-button
   background: var(--accent-tint); color: var(--accent); font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums;
 }
 .run-grams small { font-size: inherit; }
+
+/* Dasselbe Getränk nochmal */
+.recent-wrap { margin-bottom: 10px; }
+.recent-wrap .label { display: block; font-size: 12px; color: var(--muted); font-weight: 600; margin-bottom: 6px; }
+.recent { display: flex; gap: 6px; overflow-x: auto; margin: 0 -16px; padding: 0 16px 2px; scrollbar-width: none; }
+.recent::-webkit-scrollbar { display: none; }
+.recent-chip {
+  flex: none; min-height: 48px; border-radius: 14px; border: 1px solid var(--accent-dim); background: var(--accent-surface);
+  color: var(--text); display: flex; align-items: center; gap: 8px; padding: 4px 12px 4px 10px; text-align: left;
+  transition: transform .08s ease;
+}
+.recent-chip:active { transform: scale(.96); border-color: var(--accent); }
+.recent-chip .ico { color: var(--accent); }
+.recent-chip b { display: block; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.recent-chip small { display: block; font-size: 11px; color: #C9B892; white-space: nowrap; }
+.again-btn {
+  margin-top: 10px; min-height: 48px; border-radius: 14px; border: 1px solid var(--accent); background: var(--accent-surface);
+  color: var(--accent); font-weight: 700; font-size: 15px; padding: 0 16px; display: inline-flex; align-items: center; gap: 8px;
+}
+.again-btn .ico { stroke-width: 2; }
+.again-btn { text-align: left; padding-top: 6px; padding-bottom: 6px; line-height: 1.25; }

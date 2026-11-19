@@ -102,6 +102,7 @@
         <svg class="ico" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path d="M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM12 9v4l2.5 1.500M9.500 2.500h5"/></svg>
         <strong>Trockenzeit</strong>
         <span>Das Glas ist leer. Tippe unten auf ein Getränk, die Stoppuhr startet sofort.</span>
+        <button type="button" class="again-btn" id="btn-again" hidden></button>
       </div>
     </section>
 
@@ -112,6 +113,10 @@
           <button type="button" role="radio" data-addmode="start" aria-checked="true">Stoppuhr</button>
           <button type="button" role="radio" data-addmode="past" aria-checked="false">Nachtragen</button>
         </div>
+      </div>
+      <div class="recent-wrap" id="recent-wrap" hidden>
+        <span class="label">Nochmal</span>
+        <div class="recent" id="recent"></div>
       </div>
       <div class="presets" id="presets"></div>
       <button type="button" class="water-btn" id="btn-water">

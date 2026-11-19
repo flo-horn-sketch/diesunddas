@@ -6,7 +6,7 @@ import {
   pick, katerForecast, tempoVerdict, runningComment, drinksSinceWater,
 } from './fun.js';
 
-export const APP_VERSION = 9;
+export const APP_VERSION = 10;
 
 const pickOne = (list) => pick(list);
 
@@ -54,6 +54,7 @@ const state = {
   fullStomach: store.get('pegel.fullStomach', false),
   presetSizes: store.get('pegel.presetSizes', {}),
   water: store.get('pegel.water', []).filter((t) => t > Date.now() - KEEP_DRINKS_MS),
+  recent: store.get('pegel.recent', []).filter((r) => r && r.name && r.volumeMl > 0 && r.abv > 0),
   quip: { level: null, text: '' },
   twister: pick(TWISTERS),
   addMode: 'start', // 'start' = Stoppuhr, 'past' = nachtragen
@@ -63,7 +64,31 @@ const state = {
   undo: null,
 };
 
-const saveDrinks = () => { store.set('pegel.drinks', state.drinks); store.set('pegel.water', state.water); };
+const saveDrinks = () => {
+  store.set('pegel.drinks', state.drinks);
+  store.set('pegel.water', state.water);
+  syncRecent();
+};
+
+/**
+ * „Nochmal“-Liste: je Getränkename der zuletzt verwendete Stand (Menge, Prozent),
+ * auch wenn er erst während der Stoppuhr geändert wurde. Bleibt über den Abend hinaus erhalten.
+ */
+function syncRecent() {
+  const byName = new Map(state.recent.map((r) => [r.name.toLowerCase(), r]));
+  for (const d of [...state.drinks].sort((a, b) => a.time - b.time)) {
+    if (!(d.abv > 0)) continue;
+    const key = d.name.toLowerCase();
+    byName.delete(key); // neu einfügen = ans Ende, also „zuletzt“
+    byName.set(key, {
+      name: d.name, cat: d.cat, icon: d.icon, volumeMl: d.volumeMl, abv: d.abv,
+      sizes: d.sizes ?? [], presetKey: d.presetKey ?? null,
+      estMin: d.baseEstMin ?? d.estMin ?? null, defaultMl: d.refMl ?? d.volumeMl, usedAt: d.time,
+    });
+  }
+  state.recent = [...byName.values()].sort((a, b) => b.usedAt - a.usedAt).slice(0, 8);
+  store.set('pegel.recent', state.recent);
+}
 const newId = () => crypto.randomUUID?.() ?? String(Date.now() + Math.random());
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
@@ -253,6 +278,7 @@ function render() {
   renderMascot(cls.level, s.current);
   renderFunFact(s.totalGrams);
   renderFun(cls.level, s);
+  renderRecent();
 
   renderChart(s, drinks, now);
   renderRunning(now);
@@ -553,6 +579,43 @@ function presetBase(preset) {
     volumeMl: state.presetSizes[preset.name] ?? preset.volumeMl,
     presetKey: preset.name,
   };
+}
+
+/** Entspricht der Eintrag genau einer Kachel? Dann ist er in der Nochmal-Leiste überflüssig. */
+function sameAsPreset(r) {
+  const preset = PRESETS.find((x) => x.name === r.presetKey && x.name === r.name);
+  if (!preset) return false;
+  return (state.presetSizes[preset.name] ?? preset.volumeMl) === r.volumeMl && preset.abv === r.abv;
+}
+
+function againLabel(r) {
+  return `${r.name} · ${fmtDrinkMeta(r)}`;
+}
+
+function renderRecent() {
+  const list = state.recent.filter((r) => !sameAsPreset(r)).slice(0, 6);
+  $('recent-wrap').hidden = list.length === 0;
+  $('recent').replaceChildren(...list.map((r) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'recent-chip';
+    b.innerHTML = '<span><b></b><small></small></span>';
+    b.prepend(icon(r.icon ?? iconFor(r.cat), 22));
+    b.querySelector('b').textContent = r.name;
+    b.querySelector('small').textContent = fmtDrinkMeta(r);
+    b.setAttribute('aria-label', `Nochmal: ${againLabel(r)}`);
+    b.addEventListener('click', () => choose({ ...r }));
+    return b;
+  }));
+
+  // „Noch eins“ in der leeren Stoppuhr-Karte: das zuletzt getrunkene Getränk
+  const last = state.recent[0];
+  const btn = $('btn-again');
+  btn.hidden = !last;
+  if (last) {
+    btn.replaceChildren(icon('plus', 18), document.createTextNode(`Noch eins: ${againLabel(last)}`));
+    btn.onclick = () => choose({ ...last });
+  }
 }
 
 function renderPresets() {
@@ -906,6 +969,7 @@ setInterval(tickTimers, SEC);
 setInterval(render, 30 * SEC);
 
 normalizeRunning();
+syncRecent(); // bestehende Getränke in die Nochmal-Liste übernehmen
 $('version').textContent = `Version ${APP_VERSION}`;
 renderAddMode();
 renderCats();
