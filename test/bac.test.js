@@ -126,3 +126,79 @@ test('Getränk, das noch getrunken wird, zählt erst anteilig', () => {
   assert.ok(s.current < sAll.current);
   assert.ok(s.peak.t > t0 + 30 * 60_000);
 });
+
+// ---------- Gegenproben zur Genauigkeit ----------
+import { eliminationRate, likelyRange, STOMACH, ELIMINATION } from '../js/bac.js';
+
+const seidlR = (p) => (p.sex === 'male'
+  ? 0.31608 - 0.004821 * p.weightKg + 0.004632 * p.heightCm
+  : 0.31223 - 0.006446 * p.weightKg + 0.004466 * p.heightCm);
+const watsonR = (p) => (1.055 * totalBodyWater(p)) / (0.8 * p.weightKg);
+
+test('Gegenprobe: Watson-Verteilungsfaktor stimmt mit Seidl et al. (2000) überein', () => {
+  const people = [
+    male, female,
+    { sex: 'male', age: 45, heightCm: 178, weightKg: 85 },
+    { sex: 'male', age: 40, heightCm: 185, weightKg: 110 },
+    { sex: 'female', age: 50, heightCm: 170, weightKg: 70 },
+    { sex: 'female', age: 25, heightCm: 160, weightKg: 52 },
+  ];
+  for (const p of people) {
+    const dev = Math.abs(watsonR(p) / seidlR(p) - 1);
+    assert.ok(dev < 0.05, `${JSON.stringify(p)}: Abweichung ${(dev * 100).toFixed(1)} %`);
+  }
+});
+
+test('Gegenprobe: Verteilungsvolumen liegt bei den Literaturwerten (M ≈ 0,71, F ≈ 0,58 l/kg)', () => {
+  const vd = (p) => totalBodyWater(p) / (0.8 * p.weightKg);
+  assert.ok(Math.abs(vd({ sex: 'male', age: 40, heightCm: 178, weightKg: 80 }) - 0.71) < 0.04);
+  assert.ok(Math.abs(vd({ sex: 'female', age: 40, heightCm: 166, weightKg: 68 }) - 0.58) < 0.04);
+});
+
+test('Gegenprobe: Simulation trifft die Handrechnung nach Widmark (zurückgerechneter Anfangswert)', () => {
+  const t0 = Date.UTC(2026, 0, 1, 20);
+  const grams = 3 * alcoholGrams(500, 5);
+  const c0 = grams * (1 - STOMACH.empty.resorptionDeficit) * (0.8 / (1.055 * totalBodyWater(male)));
+  const pts = simulate([beer(t0), beer(t0), beer(t0)], male);
+  const c2 = bacAt(pts, t0 + 2 * H);
+  const c3 = bacAt(pts, t0 + 3 * H);
+  const extrapolated = c2 + 2 * (c2 - c3);
+  assert.ok(Math.abs(extrapolated / c0 - 1) < 0.02, `C0 ${c0.toFixed(3)} gegen ${extrapolated.toFixed(3)}`);
+});
+
+test('Ohne Abbau bleibt der gesamte aufgenommene Alkohol erhalten', () => {
+  const t0 = Date.UTC(2026, 0, 1, 20);
+  const drinks = [beer(t0, { durationMin: 45 }), beer(t0 + H, { durationMin: 0, fullStomach: true }), beer(t0 + 2 * H, { durationMin: 120 })];
+  const k = permillePerGram(male);
+  const expected = alcoholGrams(500, 5) * k * (2 * (1 - STOMACH.empty.resorptionDeficit) + (1 - STOMACH.full.resorptionDeficit));
+  const pts = simulate(drinks, male, { elimination: 0 });
+  assert.ok(Math.abs(pts.at(-1).bac / expected - 1) < 0.002, `${pts.at(-1).bac} gegen ${expected}`);
+});
+
+test('Rechengenauigkeit: feinere Zeitschritte ändern das Ergebnis praktisch nicht', () => {
+  const t0 = Date.UTC(2026, 0, 1, 20);
+  const drinks = [beer(t0, { durationMin: 30 }), beer(t0 + 40 * 60_000, { durationMin: 25 }), beer(t0 + 90 * 60_000, { durationMin: 30, fullStomach: true })];
+  const peakOf = (pts) => Math.max(...pts.map((p) => p.bac));
+  const coarse = peakOf(simulate(drinks, male));
+  const fine = peakOf(simulate(drinks, male, { stepMin: 0.1 }));
+  assert.ok(Math.abs(coarse - fine) < 0.003, `${coarse} gegen ${fine}`);
+});
+
+test('Abbau: im geraden Teil 0,15 ‰/h, bei kleinen Werten langsamer, nie schneller als nötig', () => {
+  assert.ok(Math.abs(eliminationRate(0.5) - 0.15) < 0.005);
+  assert.ok(Math.abs(eliminationRate(1.0) - 0.15) < 0.01);
+  assert.ok(eliminationRate(0.05) < 0.1);
+  assert.equal(eliminationRate(0), 0);
+  assert.ok(Math.abs(eliminationRate(0.5, ELIMINATION.slow) - 0.1) < 0.005);
+});
+
+test('Langsam getrunken ergibt einen kleinen Wert, nicht null', () => {
+  const t0 = Date.UTC(2026, 0, 1, 20);
+  const peak = Math.max(...simulate([beer(t0, { durationMin: 180 })], male).map((p) => p.bac));
+  assert.ok(peak > 0.03 && peak < 0.15, `Höchstwert ${peak}`);
+});
+
+test('Spanne um den Schätzwert: ± 21 %', () => {
+  const r = likelyRange(1);
+  assert.ok(Math.abs(r.low - 0.79) < 1e-9 && Math.abs(r.high - 1.21) < 1e-9);
+});

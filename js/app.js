@@ -1,4 +1,4 @@
-import { summarize, classify, alcoholGrams, isValidProfile } from './bac.js';
+import { summarize, classify, alcoholGrams, isValidProfile, likelyRange } from './bac.js';
 import { CATEGORIES, searchDrinks, sizesFor, iconFor, estMinFor } from './drinks.js';
 import { icon } from './icons.js';
 import {
@@ -7,7 +7,7 @@ import {
 } from './fun.js';
 import { buildNotification, notifySupport, showNotification, clearNotification } from './notify.js';
 
-export const APP_VERSION = 11;
+export const APP_VERSION = 12;
 
 const pickOne = (list) => pick(list);
 
@@ -260,6 +260,10 @@ function render() {
   $('hero').dataset.level = cls.level;
   $('bac-value').textContent = fmtBac(s.current);
   $('status-label').textContent = cls.label;
+  const range = likelyRange(s.current);
+  $('bac-range').textContent = s.current >= 0.01
+    ? `geschätzt · eher ${fmtBac(range.low)} bis ${fmtBac(range.high)}`
+    : 'geschätzt';
   $('status-note').textContent = hasDrinks ? cls.note : '';
   $('status-note').hidden = !hasDrinks;
   $('gauge-fill').style.width = `${Math.max(2, Math.min(100, (s.current / 1.6) * 100)).toFixed(1)}%`;

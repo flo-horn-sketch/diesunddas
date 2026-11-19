@@ -1,12 +1,19 @@
 // Pegel – Blutalkohol-Modell (reine Rechenlogik, ohne DOM)
 //
-// Verteilung:   Watson-Formel für das Gesamtkörperwasser (TBW),
-//               BAK [‰] = 0,8 · A / (1,055 · TBW)   (A = resorbierter Alkohol in g)
+// Verteilung:   Watson-Formel für das Gesamtkörperwasser (GKW, Watson et al. 1981),
+//               BAK [‰ = g/kg] = 0,8 · A / (1,055 · GKW)   (A = resorbierter Alkohol in g;
+//               0,8 = Wasseranteil des Blutes, 1,055 g/ml = Dichte des Blutes).
+//               Entspricht der Widmark-Formel mit individuellem Reduktionsfaktor r.
+//               Gegenprobe: stimmt für normale Körpermaße auf wenige Prozent mit der
+//               Formel von Seidl et al. (2000) überein (siehe Tests).
 // Resorption:   exponentiell (Halbwertszeit abhängig vom Mageninhalt),
-//               abzüglich Resorptionsdefizit (Alkohol, der nie im Blut ankommt)
-// Abbau:        linear nach Widmark (Standard 0,15 ‰ pro Stunde)
+//               abzüglich Resorptionsdefizit (Alkohol, der nie im Blut ankommt):
+//               leerer Magen 0–10 % (hier 5 %), voller Magen 10–30 % (hier 20 %).
+// Abbau:        im Mittel 0,15 ‰ pro Stunde (Spanne 0,1–0,2). Oberhalb von etwa 0,2 ‰
+//               praktisch linear (Widmark), darunter langsamer, weil das abbauende Enzym
+//               nicht mehr ausgelastet ist (Michaelis-Menten-Kinetik).
 //
-// Alle Werte sind Schätzungen. Echte Werte schwanken individuell stark.
+// Alle Werte sind Schätzungen. Die Streuung zwischen Menschen liegt bei rund ±20 %.
 
 export const ETHANOL_DENSITY = 0.789; // g/ml
 const BLOOD_WATER_FRACTION = 0.8;
@@ -14,11 +21,28 @@ const BLOOD_DENSITY = 1.055; // g/ml
 const HOUR = 3600_000;
 const MINUTE = 60_000;
 
-/** Abbaurate in ‰ pro Stunde */
+/** Abbaurate in ‰ pro Stunde (gemessen im geraden Teil der Kurve, etwa 0,2 bis 1,0 ‰) */
 export const ELIMINATION = { fast: 0.2, typical: 0.15, slow: 0.1 };
 
+/**
+ * Halbsättigung des Abbaus in ‰. Literaturwerte für den Menschen liegen bei etwa
+ * 0,03 bis 0,08 g/l; unterhalb von rund 0,1 ‰ ist die Kurve nicht mehr gerade.
+ */
+export const ELIMINATION_KM = 0.04;
+// Damit die mittlere Steigung zwischen 1,0 und 0,2 ‰ genau der Abbaurate entspricht:
+const VMAX_FACTOR = (0.8 + ELIMINATION_KM * Math.log(1.0 / 0.2)) / 0.8;
+
+/** Momentane Abbaugeschwindigkeit in ‰ pro Stunde bei Blutalkohol `bac` */
+export function eliminationRate(bac, beta = ELIMINATION.typical) {
+  if (bac <= 0) return 0;
+  return (beta * VMAX_FACTOR * bac) / (ELIMINATION_KM + bac);
+}
+
+/** Übliche Streuung einer solchen Berechnung (Variationskoeffizient, Gullberg/Searle) */
+export const RELATIVE_UNCERTAINTY = 0.21;
+
 export const STOMACH = {
-  empty: { absorptionHalfLifeMin: 8, resorptionDeficit: 0.1 },
+  empty: { absorptionHalfLifeMin: 8, resorptionDeficit: 0.05 },
   full: { absorptionHalfLifeMin: 20, resorptionDeficit: 0.2 },
 };
 
@@ -90,7 +114,7 @@ export function simulate(drinks, profile, { elimination = ELIMINATION.typical, s
   const sorted = [...drinks].sort((a, b) => a.time - b.time);
   const k = permillePerGram(profile);
   const stepMs = stepMin * MINUTE;
-  const elimPerStep = (elimination * stepMin) / 60;
+  const stepH = stepMin / 60;
   const start = sorted[0].time;
   const lastDrink = Math.max(...sorted.map((d) => d.time + drinkDurationMs(d)));
   const hardEnd = Math.max(lastDrink, until) + 72 * HOUR;
@@ -107,7 +131,10 @@ export function simulate(drinks, profile, { elimination = ELIMINATION.typical, s
       gramsIn += effectiveGrams(d) * (f1 - f0);
       if (f1 < 0.999) pending = true;
     }
-    bac = Math.max(0, bac + gramsIn * k - elimPerStep);
+    bac += gramsIn * k;
+    bac -= eliminationRate(bac, elimination) * stepH;
+    // Erst wenn nichts mehr nachkommt, den Rest unter der Anzeigegrenze auf null setzen
+    if (!pending && bac < 0.001) bac = 0;
     points.push({ t, bac });
     if (!pending && bac === 0 && t >= until) break;
   }
@@ -167,6 +194,11 @@ export function summarize(drinks, profile, now) {
     soberLatest: timeBelow(slow, EPS, now),
     totalGrams: drinks.reduce((s, d) => s + alcoholGrams(d.volumeMl, d.abv), 0),
   };
+}
+
+/** Wahrscheinliche Spanne um einen Schätzwert (± eine Standardabweichung) */
+export function likelyRange(bac) {
+  return { low: bac * (1 - RELATIVE_UNCERTAINTY), high: bac * (1 + RELATIVE_UNCERTAINTY) };
 }
 
 /** Einordnung eines Promillewerts (Rechtslage Deutschland, Stand 2026) */

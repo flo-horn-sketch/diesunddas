@@ -48,12 +48,32 @@ Wenn du Dateien änderst, erhöhe `VERSION` in `sw.js`, damit installierte Apps 
 | Schritt | Modell |
 |---|---|
 | Alkoholmenge | Volumen × Vol.-% × 0,789 g/ml |
-| Verteilung | Watson-Formel (Gesamtkörperwasser aus Geschlecht, Alter, Größe, Gewicht): BAK = 0,8 · A / (1,055 · TBW) |
+| Verteilung | Watson-Formel (Gesamtkörperwasser GKW aus Geschlecht, Alter, Größe, Gewicht): BAK [‰] = 0,8 · A / (1,055 · GKW) |
 | Trinkdauer | jedes Getränk hat „von–bis“; der Alkohol kommt gleichmäßig über diese Zeit in den Magen |
-| Aufnahme | exponentiell; leerer Magen: Halbwertszeit 8 min, 10 % Resorptionsdefizit; voller Magen: 20 min, 20 % |
-| Abbau | linear nach Widmark, 0,15 ‰/h (Spanne für „nüchtern“: 0,1 bis 0,2 ‰/h) |
+| Aufnahme | exponentiell; leerer Magen: Halbwertszeit 8 min, 5 % Resorptionsdefizit; voller Magen: 20 min, 20 % |
+| Abbau | im Mittel 0,15 ‰/h (Spanne für „nüchtern“: 0,1 bis 0,2 ‰/h); unterhalb von etwa 0,2 ‰ langsamer (Michaelis-Menten, Halbsättigung 0,04 ‰) |
+| Unsicherheit | Anzeige „eher x bis y“: ± 21 % um den Schätzwert |
 
 Die Rechenlogik steckt komplett in `js/bac.js`, die Oberfläche in `js/app.js`.
+
+### Wie genau ist das?
+
+Geprüft gegen die Literatur und mit Gegenproben in `test/bac.test.js`:
+
+- **Formel und Konstanten** entsprechen der in Deutschland üblichen Watson-Variante der Widmark-Formel
+  (Watson et al. 1981; Wasseranteil des Blutes 0,8, Blutdichte 1,055 g/ml, Ethanoldichte 0,789 g/ml).
+- **Gegenprobe Verteilung:** Der Watson-Faktor stimmt für normale Körpermaße auf unter 5 % mit der
+  unabhängigen Formel von Seidl et al. (2000) überein; das Verteilungsvolumen liegt bei den
+  Literaturwerten (Männer etwa 0,71, Frauen etwa 0,58 l/kg).
+- **Gegenprobe Rechnung:** Die Simulation trifft die Handrechnung nach Widmark auf unter 2 %; ohne Abbau
+  bleibt der aufgenommene Alkohol exakt erhalten; feinere Zeitschritte ändern das Ergebnis nicht.
+- **Abbau bei kleinen Werten:** Ein rein linearer Abbau zeigt bei langsamem Trinken fälschlich 0,00 ‰ und
+  lässt den Wert am Ende zu früh auf null fallen. Deshalb wird unterhalb von etwa 0,2 ‰ langsamer abgebaut.
+
+**Grenzen:** Kein Rechenmodell kennt deinen Körper. Die Streuung zwischen Menschen liegt bei rund ± 20 %
+(Gullberg; Searle 2015), bei vollem Magen, sehr schnellem Trinken oder starkem Über- oder Untergewicht auch
+mehr. Die Aufnahmegeschwindigkeit (Halbwertszeiten) ist eine Annahme, keine Messung. Genau wissen kann es
+nur ein Atem- oder Bluttest.
 
 ## Projektstruktur
 
