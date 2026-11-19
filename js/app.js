@@ -5,8 +5,9 @@ import {
   QUIPS, WATER_QUIPS, THIRSTY_QUIPS, CHEERS, SHOT_CHEERS, TWISTERS,
   pick, katerForecast, tempoVerdict, runningComment, drinksSinceWater,
 } from './fun.js';
+import { buildNotification, notifySupport, showNotification, clearNotification } from './notify.js';
 
-export const APP_VERSION = 10;
+export const APP_VERSION = 11;
 
 const pickOne = (list) => pick(list);
 
@@ -55,6 +56,8 @@ const state = {
   presetSizes: store.get('pegel.presetSizes', {}),
   water: store.get('pegel.water', []).filter((t) => t > Date.now() - KEEP_DRINKS_MS),
   recent: store.get('pegel.recent', []).filter((r) => r && r.name && r.volumeMl > 0 && r.abv > 0),
+  notify: store.get('pegel.notify', false),
+  notifyLast: { key: '', at: 0 },
   quip: { level: null, text: '' },
   twister: pick(TWISTERS),
   addMode: 'start', // 'start' = Stoppuhr, 'past' = nachtragen
@@ -68,6 +71,7 @@ const saveDrinks = () => {
   store.set('pegel.drinks', state.drinks);
   store.set('pegel.water', state.water);
   syncRecent();
+  scheduleNotify();
 };
 
 /**
@@ -279,6 +283,7 @@ function render() {
   renderFunFact(s.totalGrams);
   renderFun(cls.level, s);
   renderRecent();
+  if (state.notify) renderNotify();
 
   renderChart(s, drinks, now);
   renderRunning(now);
@@ -964,7 +969,92 @@ $('btn-clear').addEventListener('click', () => {
   commit('Alles gelöscht. Der Deckel ist bezahlt.', () => { state.drinks = []; state.water = []; });
 });
 
-document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) render();
+  else refreshNotification(); // beim Verlassen der App den Fahrplan auf den neuesten Stand bringen
+});
+
+// ---------- Fahrplan auf dem Sperrbildschirm ----------
+function currentNote(now = Date.now()) {
+  if (!state.profile) return null;
+  const s = summarize(modelDrinks(now), state.profile, now);
+  return buildNotification(s, now, classify(s.current).label);
+}
+
+let notifyTimer;
+function scheduleNotify() {
+  if (!state.notify) return;
+  clearTimeout(notifyTimer);
+  notifyTimer = setTimeout(() => refreshNotification(true), 1500); // nicht bei jedem Tastendruck
+}
+
+/** Legt den Fahrplan neu ab, wenn sich etwas geändert hat (oder `force`), sonst höchstens alle 10 min */
+async function refreshNotification(force = false) {
+  if (!state.notify || notifySupport() !== 'ok') return false;
+  const now = Date.now();
+  const note = currentNote(now);
+  if (!note) {
+    await clearNotification(); // nichts mehr anzuzeigen: alte Mitteilung wegräumen
+    state.notifyLast = { key: '', at: now };
+    renderNotify();
+    return true;
+  }
+  const key = note.body; // der Titel enthält die Uhrzeit und ändert sich ständig
+  if (!force && key === state.notifyLast.key && now - state.notifyLast.at < 10 * MIN) return true;
+  const ok = await showNotification(note);
+  if (ok) state.notifyLast = { key, at: now };
+  renderNotify();
+  return ok;
+}
+
+function renderNotify() {
+  const support = notifySupport();
+  const on = state.notify && support === 'ok' && Notification.permission === 'granted';
+  $('notify-pill').hidden = !on;
+  $('notify-toggle').textContent = on ? 'Ausschalten' : 'Einschalten';
+  $('notify-toggle').classList.toggle('on', on);
+  $('notify-refresh').hidden = !on;
+  const note = on ? currentNote() : null;
+  $('notify-preview').hidden = !note;
+  if (note) $('notify-preview').textContent = `${note.title}\n${note.body}`;
+  $('notify-status').textContent = {
+    install: 'Auf dem iPhone geht das erst, wenn Pegel auf dem Home-Bildschirm liegt: in Safari Teilen → „Zum Home-Bildschirm“, dann von dort öffnen.',
+    unsupported: 'Dieser Browser kann keine Mitteilungen anzeigen.',
+    denied: 'Mitteilungen sind für Pegel gesperrt. Erlaube sie in den Einstellungen des Handys unter Mitteilungen → Pegel.',
+    ok: on
+      ? (note ? 'So steht es gerade auf dem Sperrbildschirm. Bei jedem Getränk wird es erneuert.' : 'Sobald du etwas trinkst, erscheint der Fahrplan.')
+      : 'Die Uhrzeiten stehen direkt in der Mitteilung. Sie wird erneuert, wenn du ein Getränk einträgst oder die App verlässt.',
+  }[support];
+}
+
+$('notify-toggle').addEventListener('click', async () => {
+  if (state.notify && notifySupport() === 'ok' && Notification.permission === 'granted') {
+    state.notify = false;
+    store.set('pegel.notify', false);
+    await clearNotification();
+    state.notifyLast = { key: '', at: 0 };
+    renderNotify();
+    return;
+  }
+  if (notifySupport() !== 'ok') { renderNotify(); return; }
+  const permission = await Notification.requestPermission();
+  state.notify = permission === 'granted';
+  store.set('pegel.notify', state.notify);
+  renderNotify();
+  if (!state.notify) return;
+  const note = currentNote() ?? {
+    title: 'Der Pegel-Fahrplan ist an',
+    body: 'Sobald du etwas trinkst, steht hier dein Stand mit den Uhrzeiten für „unter 0,5 ‰“ und „nüchtern“.',
+  };
+  const ok = await showNotification(note);
+  showToast(ok ? 'Fahrplan liegt auf dem Sperrbildschirm.' : 'Die Mitteilung konnte nicht angezeigt werden.');
+  if (ok && currentNote()) state.notifyLast = { key: note.body, at: Date.now() };
+  renderNotify();
+});
+$('notify-refresh').addEventListener('click', async () => {
+  const ok = await refreshNotification(true);
+  showToast(ok ? 'Fahrplan aktualisiert.' : 'Die Mitteilung konnte nicht angezeigt werden.');
+});
 setInterval(tickTimers, SEC);
 setInterval(render, 30 * SEC);
 
@@ -977,6 +1067,7 @@ renderAdd();
 renderStomach();
 $('water-ico').replaceChildren(icon('wasser', 26));
 render();
+renderNotify();
 if (!isValidProfile(state.profile)) openProfileDialog();
 
 // Updates: beim Zurückkehren in die App nach neuer Version schauen und dann einmal neu laden

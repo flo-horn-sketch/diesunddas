@@ -1,8 +1,8 @@
 // Service Worker: hält die App offline verfügbar.
 // Bei Änderungen an den Dateien VERSION erhöhen, damit Handys die neue Version laden.
-const VERSION = 'pegel-v10';
+const VERSION = 'pegel-v11';
 const ASSETS = [
-  './', 'index.html', 'css/style.css', 'js/app.js', 'js/bac.js', 'js/drinks.js', 'js/icons.js', 'js/fun.js', 'fonts/inter.woff2', 'fonts/space-grotesk.woff2', 'manifest.webmanifest',
+  './', 'index.html', 'css/style.css', 'js/app.js', 'js/bac.js', 'js/drinks.js', 'js/icons.js', 'js/fun.js', 'js/notify.js', 'fonts/inter.woff2', 'fonts/space-grotesk.woff2', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
 ];
 
@@ -30,5 +30,16 @@ self.addEventListener('fetch', (e) => {
         return res;
       })
       .catch(() => caches.match(e.request, { ignoreSearch: true })),
+  );
+});
+
+// Tipp auf den Fahrplan (Mitteilung) öffnet die App
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      const open = list.find((c) => 'focus' in c);
+      return open ? open.focus() : self.clients.openWindow('./');
+    }),
   );
 });
