@@ -88,6 +88,11 @@
           <span class="timer" id="run-timer">00:00</span>
         </div>
         <div class="size-row" id="run-sizes" role="group" aria-label="Menge"></div>
+        <div class="run-fields">
+          <label>Menge<input id="run-ml" type="number" inputmode="numeric" min="10" max="3000" step="1" enterkeyhint="done"><span>ml</span></label>
+          <label>Alkohol<input id="run-abv" type="number" inputmode="decimal" min="0" max="96" step="0.1" enterkeyhint="done"><span>%</span></label>
+          <div class="run-grams"><small>Reiner Alkohol</small><b id="run-grams">–</b></div>
+        </div>
         <button type="button" class="stop-btn" id="run-stop">
           <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="1" y="1" width="14" height="14" rx="3" fill="currentColor"/></svg>
           Stopp

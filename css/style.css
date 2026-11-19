@@ -422,3 +422,22 @@ dialog input::-webkit-outer-spin-button, dialog input::-webkit-inner-spin-button
 .tally svg { display: block; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
 .tally .w { color: #6FC3F0; }
 .toast { white-space: normal; }
+
+/* Menge und Prozent direkt in der Stoppuhr ändern */
+.run-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.run-fields label { position: relative; display: grid; gap: 4px; font-size: 11px; color: #C9B892; }
+.run-fields input {
+  width: 100%; min-width: 0; height: 44px; border-radius: 12px; border: 1px solid var(--accent-dim);
+  background: var(--bg); color: var(--text); font-size: 16px; font-weight: 600; padding: 0 30px 0 10px;
+  font-variant-numeric: tabular-nums; -moz-appearance: textfield;
+}
+.run-fields input::-webkit-outer-spin-button, .run-fields input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.run-fields input:focus { outline: 0; border-color: var(--accent); }
+.run-fields input.invalid { border-color: var(--danger); color: var(--danger); }
+.run-fields label > span { position: absolute; right: 10px; bottom: 13px; font-size: 12px; pointer-events: none; }
+.run-grams { display: grid; gap: 4px; align-content: start; font-size: 11px; color: #C9B892; }
+.run-grams b {
+  height: 44px; display: flex; align-items: center; padding: 0 10px; border-radius: 12px;
+  background: var(--accent-tint); color: var(--accent); font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.run-grams small { font-size: inherit; }

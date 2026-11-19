@@ -6,7 +6,7 @@ import {
   pick, katerForecast, tempoVerdict, runningComment, drinksSinceWater,
 } from './fun.js';
 
-export const APP_VERSION = 8;
+export const APP_VERSION = 9;
 
 const pickOne = (list) => pick(list);
 
@@ -423,8 +423,32 @@ function renderRunning(now) {
   $('run-meta').textContent = `seit ${fmtTime(d.time)} · ${runningComment((now - d.time) / MIN, d.estMin)}`;
   $('run-timer').dataset.start = d.time;
   $('run-timer').textContent = fmtStopwatch(now - d.time);
-  const sizes = [...new Set([...(d.sizes ?? []), d.volumeMl])].sort((a, b) => a - b);
-  sizeChips($('run-sizes'), sizes, d.volumeMl, setRunningSize);
+  sizeChips($('run-sizes'), d.sizes ?? [], d.volumeMl, setRunningSize);
+  // Eingabefelder nicht überschreiben, während gerade getippt wird
+  const ml = $('run-ml'), abv = $('run-abv');
+  if (document.activeElement !== ml) { ml.value = d.volumeMl; ml.classList.remove('invalid'); }
+  if (document.activeElement !== abv) { abv.value = d.abv; abv.classList.remove('invalid'); }
+  $('run-grams').textContent = `${fmtNum(alcoholGrams(d.volumeMl, d.abv), 1)} g`;
+}
+
+/** Menge oder Prozent des laufenden Getränks von Hand ändern */
+function editRunning(field, input, min, max) {
+  const d = runningDrink();
+  if (!d) return;
+  const v = Number(input.value);
+  const ok = input.value !== '' && Number.isFinite(v) && v >= min && v <= max;
+  input.classList.toggle('invalid', !ok);
+  if (!ok) return;
+  if (field === 'volumeMl') { setRunningSize(v); return; }
+  d[field] = v;
+  saveDrinks();
+  render();
+}
+$('run-ml').addEventListener('input', (e) => editRunning('volumeMl', e.target, 10, 3000));
+$('run-abv').addEventListener('input', (e) => editRunning('abv', e.target, 0, 96));
+for (const id of ['run-ml', 'run-abv']) {
+  $(id).addEventListener('blur', () => render()); // ungültige Eingabe wieder auf den gespeicherten Wert setzen
+  $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); });
 }
 
 function tickTimers() {
